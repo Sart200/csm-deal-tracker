@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { Pencil } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Pencil, Plus, Trash2 } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
@@ -15,7 +15,7 @@ import { ProjectStatusBadge } from '@/components/projects/ProjectStatusBadge'
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
 import { cn, getInitials, getPriorityClasses, getPriorityLabel, formatDate } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
-import { updateProject } from '@/lib/queries/projects'
+import { updateProject, addPhase, deletePhase } from '@/lib/queries/projects'
 import type { ProjectWithPhases, TeamMember, ProjectStatus, PriorityLevel } from '@/types'
 
 const PROJECT_STATUSES: { value: ProjectStatus; label: string }[] = [
@@ -210,8 +210,45 @@ interface ProjectInlineSectionProps {
 }
 
 export function ProjectInlineSection({ project, teamMembers }: ProjectInlineSectionProps) {
+  const router = useRouter()
+  const supabase = createClient()
   const [editOpen, setEditOpen] = useState(false)
+  const [addingStage, setAddingStage] = useState(false)
+  const [newStageName, setNewStageName] = useState('')
+  const [addingStageLoading, setAddingStageLoading] = useState(false)
+  const [deletingPhaseId, setDeletingPhaseId] = useState<string | null>(null)
+  const stageInputRef = useRef<HTMLInputElement>(null)
   const priorityClasses = getPriorityClasses(project.priority)
+
+  async function handleAddStage() {
+    if (!newStageName.trim()) return
+    setAddingStageLoading(true)
+    try {
+      await addPhase(supabase, project.id, newStageName.trim())
+      toast.success('Stage added')
+      setNewStageName('')
+      setAddingStage(false)
+      router.refresh()
+    } catch {
+      toast.error('Failed to add stage')
+    } finally {
+      setAddingStageLoading(false)
+    }
+  }
+
+  async function handleDeletePhase(phaseId: string, phaseName: string) {
+    if (!confirm(`Delete stage "${phaseName}"? This cannot be undone.\n\nNote: stages with tasks cannot be deleted.`)) return
+    setDeletingPhaseId(phaseId)
+    try {
+      await deletePhase(supabase, phaseId)
+      toast.success('Stage removed')
+      router.refresh()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to remove stage')
+    } finally {
+      setDeletingPhaseId(null)
+    }
+  }
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
@@ -263,6 +300,64 @@ export function ProjectInlineSection({ project, teamMembers }: ProjectInlineSect
             <Pencil className="h-3.5 w-3.5" />
           </button>
         </div>
+      </div>
+
+      {/* Stage management bar */}
+      <div className="px-4 pt-3 pb-1 flex flex-wrap items-center gap-2 border-b border-slate-100">
+        <span className="text-xs font-medium text-slate-500 mr-1">Stages:</span>
+        {project.phases.map((phase) => (
+          <div
+            key={phase.id}
+            className={cn(
+              'group flex items-center gap-1 text-xs rounded-full px-2.5 py-1 border',
+              phase.status === 'completed' ? 'bg-blue-50 border-blue-200 text-blue-700' :
+              phase.status === 'in_progress' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+              phase.status === 'skipped' ? 'bg-slate-100 border-slate-200 text-slate-400 line-through' :
+              'bg-white border-slate-200 text-slate-600',
+              deletingPhaseId === phase.id && 'opacity-40'
+            )}
+          >
+            <span>{phase.name}</span>
+            <button
+              onClick={() => handleDeletePhase(phase.id, phase.name)}
+              disabled={deletingPhaseId === phase.id}
+              className="ml-0.5 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 transition-all"
+              title="Remove stage"
+            >
+              <Trash2 className="h-2.5 w-2.5" />
+            </button>
+          </div>
+        ))}
+
+        {addingStage ? (
+          <div className="flex items-center gap-1.5">
+            <Input
+              ref={stageInputRef}
+              value={newStageName}
+              onChange={(e) => setNewStageName(e.target.value)}
+              placeholder="Stage name…"
+              className="h-6 text-xs w-32 px-2"
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') handleAddStage()
+                if (e.key === 'Escape') { setAddingStage(false); setNewStageName('') }
+              }}
+            />
+            <Button size="sm" className="h-6 text-xs px-2" onClick={handleAddStage} disabled={addingStageLoading || !newStageName.trim()}>
+              {addingStageLoading ? '…' : 'Add'}
+            </Button>
+            <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => { setAddingStage(false); setNewStageName('') }}>
+              Cancel
+            </Button>
+          </div>
+        ) : (
+          <button
+            onClick={() => { setAddingStage(true); setTimeout(() => stageInputRef.current?.focus(), 50) }}
+            className="flex items-center gap-1 text-xs text-slate-400 hover:text-blue-600 border border-dashed border-slate-200 hover:border-blue-300 rounded-full px-2.5 py-1 transition-colors"
+          >
+            <Plus className="h-3 w-3" />
+            Add Stage
+          </button>
+        )}
       </div>
 
       {/* Kanban board */}

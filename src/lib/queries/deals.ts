@@ -128,6 +128,47 @@ export async function getOnboardingTasks(
   return data ?? []
 }
 
+export async function addOnboardingTask(
+  supabase: SupabaseClient,
+  dealId: string,
+  title: string
+): Promise<OnboardingTask> {
+  // Get max task_number for this deal
+  const { data: existing } = await supabase
+    .from("onboarding_tasks")
+    .select("task_number")
+    .eq("deal_id", dealId)
+    .order("task_number", { ascending: false })
+    .limit(1)
+
+  const nextNumber = (existing?.[0]?.task_number ?? 0) + 1
+
+  const { data, error } = await supabase
+    .from("onboarding_tasks")
+    .insert({
+      deal_id: dealId,
+      task_number: nextNumber,
+      title,
+      owner_role: "CSM",
+      evidence_type: "Manual",
+    })
+    .select(`*, completed_by_member:team_members(id, name)`)
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deleteOnboardingTask(
+  supabase: SupabaseClient,
+  taskId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("onboarding_tasks")
+    .delete()
+    .eq("id", taskId)
+  if (error) throw error
+}
+
 export async function updateOnboardingTask(
   supabase: SupabaseClient,
   id: string,

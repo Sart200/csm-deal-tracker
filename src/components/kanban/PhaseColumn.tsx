@@ -198,6 +198,7 @@ export function PhaseColumn({ phase, teamMembers, onTaskUpdate }: PhaseColumnPro
         phaseId={phase.id}
         phaseName={phase.name}
         teamMembers={teamMembers}
+        tasks={phase.tasks}
         open={blockerFormOpen}
         onOpenChange={setBlockerFormOpen}
         onSuccess={() => {

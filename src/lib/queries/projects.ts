@@ -102,7 +102,7 @@ export async function getProjectById(
 export async function createProject(
   supabase: SupabaseClient,
   dealId: string,
-  data: ProjectFormData,
+  data: ProjectFormData & { phases?: string[] },
   actorId?: string
 ): Promise<Project> {
   const { data: project, error } = await supabase
@@ -119,6 +119,21 @@ export async function createProject(
     .single()
   if (error) throw error
 
+  // Create phases if provided
+  if (data.phases && data.phases.length > 0) {
+    const phaseRows = data.phases
+      .filter((name) => name.trim())
+      .map((name, idx) => ({
+        project_id: project.id,
+        phase_number: idx + 1,
+        name: name.trim(),
+        status: "not_started" as const,
+      }))
+    if (phaseRows.length > 0) {
+      await supabase.from("phases").insert(phaseRows)
+    }
+  }
+
   await logActivity(supabase, {
     entity_type: "project",
     entity_id: project.id,
@@ -130,6 +145,47 @@ export async function createProject(
   })
 
   return project
+}
+
+export async function addPhase(
+  supabase: SupabaseClient,
+  projectId: string,
+  name: string
+): Promise<{ id: string; phase_number: number; name: string }> {
+  const { data: existing } = await supabase
+    .from("phases")
+    .select("phase_number")
+    .eq("project_id", projectId)
+    .order("phase_number", { ascending: false })
+    .limit(1)
+
+  const nextNumber = (existing?.[0]?.phase_number ?? 0) + 1
+
+  const { data, error } = await supabase
+    .from("phases")
+    .insert({ project_id: projectId, phase_number: nextNumber, name, status: "not_started" })
+    .select("id, phase_number, name")
+    .single()
+  if (error) throw error
+  return data
+}
+
+export async function deletePhase(
+  supabase: SupabaseClient,
+  phaseId: string
+): Promise<void> {
+  const { data: tasks } = await supabase
+    .from("tasks")
+    .select("id")
+    .eq("phase_id", phaseId)
+    .limit(1)
+
+  if (tasks && tasks.length > 0) {
+    throw new Error("Cannot delete a stage that has tasks. Remove all tasks first.")
+  }
+
+  const { error } = await supabase.from("phases").delete().eq("id", phaseId)
+  if (error) throw error
 }
 
 export async function updateProject(

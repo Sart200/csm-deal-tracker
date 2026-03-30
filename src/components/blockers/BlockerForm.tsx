@@ -25,7 +25,7 @@ import {
 } from '@/components/ui/select'
 import { createClient } from '@/lib/supabase/client'
 import { createBlocker } from '@/lib/queries/blockers'
-import type { TeamMember } from '@/types'
+import type { TeamMember, TaskWithDetails } from '@/types'
 
 const blockerSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -33,6 +33,7 @@ const blockerSchema = z.object({
   category: z.enum(['client', 'internal', 'technical', 'commercial', 'other']),
   owner: z.string().optional(),
   target_resolution_date: z.string().optional(),
+  task_id: z.string().optional(),
 })
 
 type BlockerFormValues = z.infer<typeof blockerSchema>
@@ -44,6 +45,7 @@ interface BlockerFormProps {
   onOpenChange: (v: boolean) => void
   onSuccess: () => void
   teamMembers: TeamMember[]
+  tasks?: TaskWithDetails[]
 }
 
 export function BlockerForm({
@@ -53,6 +55,7 @@ export function BlockerForm({
   onOpenChange,
   onSuccess,
   teamMembers,
+  tasks = [],
 }: BlockerFormProps) {
   const {
     register,
@@ -69,6 +72,7 @@ export function BlockerForm({
       category: 'internal',
       owner: undefined,
       target_resolution_date: '',
+      task_id: undefined,
     },
   })
 
@@ -80,6 +84,7 @@ export function BlockerForm({
         category: 'internal',
         owner: undefined,
         target_resolution_date: '',
+        task_id: undefined,
       })
     }
   }, [open, reset])
@@ -103,6 +108,7 @@ export function BlockerForm({
           owner: values.owner || undefined,
           target_resolution_date: values.target_resolution_date || undefined,
           phase_id: phaseId,
+          task_id: values.task_id || undefined,
         },
         actorId
       )
@@ -116,6 +122,10 @@ export function BlockerForm({
 
   const category = watch('category')
   const owner = watch('owner')
+  const taskId = watch('task_id')
+
+  // Only show active (non-done, non-na) tasks
+  const activeTasks = tasks.filter((t) => t.status !== 'done' && t.status !== 'na')
 
   return (
     <Dialog open={open} onOpenChange={(v) => { if (!v) reset(); onOpenChange(v) }}>
@@ -142,6 +152,35 @@ export function BlockerForm({
               <p className="text-xs text-red-500">{errors.title.message}</p>
             )}
           </div>
+
+          {/* Linked Task */}
+          {activeTasks.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>Blocking Task <span className="text-slate-400 font-normal">(optional)</span></Label>
+              <Select
+                value={taskId ?? 'none'}
+                onValueChange={(v) => setValue('task_id', v === 'none' ? undefined : v)}
+              >
+                <SelectTrigger>
+                  <SelectValue>
+                    {(v: string) =>
+                      v && v !== 'none'
+                        ? activeTasks.find((t) => t.id === v)?.title ?? v
+                        : 'Not linked to a specific task'
+                    }
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not linked to a specific task</SelectItem>
+                  {activeTasks.map((t) => (
+                    <SelectItem key={t.id} value={t.id}>
+                      {t.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          )}
 
           {/* Description */}
           <div className="space-y-1.5">
@@ -182,7 +221,13 @@ export function BlockerForm({
               onValueChange={(v) => setValue('owner', v === 'unassigned' || v == null ? undefined : v)}
             >
               <SelectTrigger>
-                <SelectValue placeholder="Unassigned" />
+                <SelectValue>
+                  {(v: string) =>
+                    v && v !== 'unassigned'
+                      ? teamMembers.find((m) => m.id === v)?.name ?? v
+                      : 'Unassigned'
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="unassigned">Unassigned</SelectItem>

@@ -7,7 +7,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod/v4'
 import { toast } from 'sonner'
 import Link from 'next/link'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Plus, X, GripVertical } from 'lucide-react'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -51,6 +51,14 @@ export default function NewProjectPage() {
 
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [templates, setTemplates] = useState<TemplateWithTasks[]>([])
+  const [stages, setStages] = useState<string[]>([
+    'Discovery & Planning',
+    'Setup & Configuration',
+    'Integration',
+    'Testing & QA',
+    'Go Live',
+    'Review & Optimisation',
+  ])
   const supabase = createClient()
 
   useEffect(() => {
@@ -93,6 +101,7 @@ export default function NewProjectPage() {
         priority: values.priority,
         csm_owner: values.csm_owner,
         target_completion_date: values.target_completion_date || undefined,
+        phases: stages.filter((s) => s.trim()),
       })
 
       if (values.template_id && values.template_id !== 'none') {
@@ -212,6 +221,48 @@ export default function NewProjectPage() {
                 type="date"
                 {...register('target_completion_date')}
               />
+            </div>
+
+            {/* Project Stages */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Project Stages</Label>
+                <span className="text-xs text-slate-400">{stages.filter(s => s.trim()).length} stages</span>
+              </div>
+              <div className="space-y-1.5">
+                {stages.map((stage, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <GripVertical className="h-4 w-4 text-slate-300 shrink-0" />
+                    <span className="text-xs text-slate-400 w-5 text-right shrink-0">{idx + 1}.</span>
+                    <Input
+                      value={stage}
+                      onChange={(e) => {
+                        const updated = [...stages]
+                        updated[idx] = e.target.value
+                        setStages(updated)
+                      }}
+                      placeholder={`Stage ${idx + 1}`}
+                      className="h-8 text-sm"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setStages(stages.filter((_, i) => i !== idx))}
+                      className="text-slate-300 hover:text-red-400 transition-colors shrink-0"
+                      title="Remove stage"
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </div>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setStages([...stages, ''])}
+                  className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-blue-600 border border-dashed border-slate-200 hover:border-blue-300 rounded-md px-3 py-1.5 w-full transition-colors"
+                >
+                  <Plus className="h-3.5 w-3.5" />
+                  Add Stage
+                </button>
+              </div>
             </div>
 
             {/* Template */}
