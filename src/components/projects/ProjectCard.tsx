@@ -24,6 +24,9 @@ export function ProjectCard({ project }: ProjectCardProps) {
   // Find the in-progress phase
   const currentPhase = project.current_phase
 
+  // Effective start = first task-driven date available, else created_at
+  const effectiveStart = currentPhase?.started_at ?? project.created_at
+
   return (
     <Link href={`/deals/${project.deal_id}/projects/${project.id}`} className="block group">
       <Card
@@ -71,10 +74,10 @@ export function ProjectCard({ project }: ProjectCardProps) {
           {/* Start date + timeline */}
           <div className="flex items-center gap-2 flex-wrap">
             <span className="text-xs text-slate-400">
-              Started {formatDate(project.created_at)}
+              Started {formatDate(effectiveStart)}
             </span>
             <span className="text-xs font-medium text-blue-600 bg-blue-50 rounded-full px-2 py-0.5">
-              {getProjectTimeline(project.created_at)} · {getDaysOpen(project.created_at)}d
+              {getProjectTimeline(effectiveStart)} · {getDaysOpen(effectiveStart)}d
             </span>
           </div>
 

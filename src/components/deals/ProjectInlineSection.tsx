@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ProjectStatusBadge } from '@/components/projects/ProjectStatusBadge'
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
-import { cn, getInitials, getPriorityClasses, getPriorityLabel, formatDate, getProjectTimeline, getDaysOpen } from '@/lib/utils'
+import { cn, getInitials, getPriorityClasses, getPriorityLabel, formatDate, getProjectTimeline, getDaysOpen, getProjectEffectiveStartDate } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { updateProject, addPhase, deletePhase } from '@/lib/queries/projects'
 import type { ProjectWithPhases, TeamMember, ProjectStatus, PriorityLevel } from '@/types'
@@ -219,6 +219,8 @@ export function ProjectInlineSection({ project, teamMembers }: ProjectInlineSect
   const [deletingPhaseId, setDeletingPhaseId] = useState<string | null>(null)
   const stageInputRef = useRef<HTMLInputElement>(null)
   const priorityClasses = getPriorityClasses(project.priority)
+  // Effective start = earliest task-driven phase.started_at, else project.created_at
+  const effectiveStartDate = getProjectEffectiveStartDate(project.phases, project.created_at)
 
   async function handleAddStage() {
     if (!newStageName.trim()) return
@@ -278,13 +280,13 @@ export function ProjectInlineSection({ project, teamMembers }: ProjectInlineSect
                   <span>{project.csm.name}</span>
                 </div>
               )}
-              {/* Start date + running timeline */}
+              {/* Start date + running timeline (driven by earliest task start date) */}
               <span className="text-xs text-slate-400">
-                Started {formatDate(project.created_at)}
+                Started {formatDate(effectiveStartDate)}
               </span>
               <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-100 rounded-full px-2 py-0.5">
-                {getProjectTimeline(project.created_at)}
-                <span className="font-normal text-blue-400">({getDaysOpen(project.created_at)}d)</span>
+                {getProjectTimeline(effectiveStartDate)}
+                <span className="font-normal text-blue-400">({getDaysOpen(effectiveStartDate)}d)</span>
               </span>
               {project.target_completion_date && (
                 <span className="text-xs text-slate-400">

@@ -74,6 +74,24 @@ export function getProjectTimeline(createdAt: string | null | undefined): string
   return `Day ${days + 1}`
 }
 
+/**
+ * Returns the effective project start date:
+ * = earliest phase.started_at (which itself = earliest task start date in that phase)
+ * Falls back to project.created_at if no phase has been started yet.
+ */
+export function getProjectEffectiveStartDate(
+  phases: { started_at: string | null }[],
+  createdAt: string
+): string {
+  const dates = phases
+    .map((p) => p.started_at)
+    .filter((d): d is string => !!d)
+    .map((d) => new Date(d))
+    .sort((a, b) => a.getTime() - b.getTime())
+
+  return dates.length > 0 ? dates[0].toISOString() : createdAt
+}
+
 export function getDaysBetween(
   from: string | null | undefined,
   to: string | null | undefined
