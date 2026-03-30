@@ -43,6 +43,7 @@ import {
   getBlockerCategoryClasses,
   getBlockerCategoryLabel,
   getDaysOpen,
+  getDaysUntilTarget,
   getInitials,
 } from '@/lib/utils'
 import type { BlockerCategory, BlockerWithDetails, TaskWithDetails, TeamMember } from '@/types'
@@ -314,11 +315,28 @@ export function BlockerDrawer({
 
                 <div className="space-y-1">
                   <div className="flex items-center gap-1 text-xs text-slate-400"><Calendar className="h-3 w-3" />Target Date</div>
-                  {blocker.target_resolution_date ? (
-                    <p className={cn('text-sm', new Date(blocker.target_resolution_date) < new Date() && !isResolved ? 'text-red-600 font-medium' : 'text-slate-700')}>
-                      {formatDate(blocker.target_resolution_date)}
-                    </p>
-                  ) : <span className="text-sm text-slate-400">Not set</span>}
+                  {blocker.target_resolution_date ? (() => {
+                    const days = getDaysUntilTarget(blocker.target_resolution_date)
+                    const overdue = days !== null && days < 0
+                    const dueToday = days === 0
+                    const urgent = days !== null && days > 0 && days <= 3
+                    return (
+                      <div className="space-y-0.5">
+                        <p className={cn('text-sm', overdue && !isResolved ? 'text-red-600 font-medium' : 'text-slate-700')}>
+                          {formatDate(blocker.target_resolution_date)}
+                        </p>
+                        {!isResolved && days !== null && (
+                          <p className={cn('text-xs font-medium', overdue ? 'text-red-500' : dueToday ? 'text-orange-500' : urgent ? 'text-yellow-600' : 'text-slate-400')}>
+                            {overdue
+                              ? `${Math.abs(days)}d overdue`
+                              : dueToday
+                              ? 'Due today'
+                              : `${days}d remaining`}
+                          </p>
+                        )}
+                      </div>
+                    )
+                  })() : <span className="text-sm text-slate-400">Not set</span>}
                 </div>
 
                 {blocker.phase && (

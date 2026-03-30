@@ -1,6 +1,7 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
+import { useRouter } from 'next/navigation'
 import {
   Table,
   TableBody,
@@ -20,15 +21,25 @@ import {
   getDaysOpen,
   getInitials,
 } from '@/lib/utils'
-import type { BlockerWithDetails } from '@/types'
+import type { BlockerWithDetails, TeamMember } from '@/types'
 
 interface BlockerTableProps {
   blockers: BlockerWithDetails[]
+  teamMembers: TeamMember[]
 }
 
-export function BlockerTable({ blockers }: BlockerTableProps) {
+export function BlockerTable({ blockers, teamMembers }: BlockerTableProps) {
+  const router = useRouter()
   const [selectedBlocker, setSelectedBlocker] = useState<BlockerWithDetails | null>(null)
   const [drawerOpen, setDrawerOpen] = useState(false)
+
+  // Sync selectedBlocker with fresh data after router.refresh()
+  useEffect(() => {
+    if (selectedBlocker) {
+      const updated = blockers.find(b => b.id === selectedBlocker.id)
+      if (updated) setSelectedBlocker(updated)
+    }
+  }, [blockers])
 
   function handleRowClick(blocker: BlockerWithDetails) {
     setSelectedBlocker(blocker)
@@ -148,8 +159,8 @@ export function BlockerTable({ blockers }: BlockerTableProps) {
         blocker={selectedBlocker}
         open={drawerOpen}
         onOpenChange={setDrawerOpen}
-        onUpdate={() => {}}
-        teamMembers={[]}
+        onUpdate={() => router.refresh()}
+        teamMembers={teamMembers}
       />
     </>
   )

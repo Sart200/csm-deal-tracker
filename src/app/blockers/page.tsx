@@ -2,6 +2,7 @@ import { Badge } from '@/components/ui/badge'
 import { BlockerTable } from '@/components/blockers/BlockerTable'
 import { createClient } from '@/lib/supabase/server'
 import { getAllOpenBlockers } from '@/lib/queries/blockers'
+import { getTeamMembers } from '@/lib/queries/team'
 
 export const metadata = {
   title: 'Open Blockers — CSM Tracker',
@@ -9,7 +10,10 @@ export const metadata = {
 
 export default async function BlockersPage() {
   const supabase = await createClient()
-  const blockers = await getAllOpenBlockers(supabase)
+  const [blockers, teamMembers] = await Promise.all([
+    getAllOpenBlockers(supabase),
+    getTeamMembers(supabase),
+  ])
 
   const totalOpen = blockers.length
   const escalated = blockers.filter((b) => b.status === 'escalated').length
@@ -45,7 +49,7 @@ export default async function BlockersPage() {
       </div>
 
       {/* Blocker table */}
-      <BlockerTable blockers={blockers} />
+      <BlockerTable blockers={blockers} teamMembers={teamMembers} />
     </div>
   )
 }

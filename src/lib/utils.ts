@@ -33,6 +33,14 @@ export function formatRelativeTime(date: string | null | undefined): string {
   return formatDistanceToNow(d, { addSuffix: true })
 }
 
+/** Positive = days remaining, negative = days overdue, null = no target date */
+export function getDaysUntilTarget(targetDate: string | null | undefined): number | null {
+  if (!targetDate) return null
+  const d = parseISO(targetDate)
+  if (!isValid(d)) return null
+  return differenceInDays(d, new Date())
+}
+
 export function getDaysOpen(date: string | null | undefined): number {
   if (!date) return 0
   const d = parseISO(date)
