@@ -8,6 +8,21 @@ import { z } from 'zod/v4'
 import { toast } from 'sonner'
 import Link from 'next/link'
 import { ArrowLeft, Plus, X, GripVertical } from 'lucide-react'
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { Button, buttonVariants } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -44,6 +59,58 @@ const PRIORITIES: { value: PriorityLevel; label: string; classes: string }[] = [
   { value: 'low', label: 'Low', classes: 'border-slate-200 bg-slate-50 text-slate-500' },
 ]
 
+// ── Sortable stage row ────────────────────────────────────────────────────────
+
+function SortableStageRow({
+  id,
+  index,
+  value,
+  onChange,
+  onRemove,
+}: {
+  id: string
+  index: number
+  value: string
+  onChange: (v: string) => void
+  onRemove: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
+  const style = { transform: CSS.Transform.toString(transform), transition }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn('flex items-center gap-2', isDragging && 'opacity-50')}
+    >
+      {/* Drag handle */}
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 transition-colors shrink-0 touch-none"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <span className="text-xs text-slate-400 w-5 text-right shrink-0">{index + 1}.</span>
+      <Input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={`Stage ${index + 1}`}
+        className="h-8 text-sm"
+      />
+      <button
+        type="button"
+        onClick={onRemove}
+        className="text-slate-300 hover:text-red-400 transition-colors shrink-0"
+        title="Remove stage"
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
 export default function NewProjectPage() {
   const router = useRouter()
   const params = useParams<{ dealId: string }>()
@@ -51,15 +118,17 @@ export default function NewProjectPage() {
 
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>([])
   const [templates, setTemplates] = useState<TemplateWithTasks[]>([])
-  const [stages, setStages] = useState<string[]>([
-    'Discovery & Planning',
-    'Setup & Configuration',
-    'Integration',
-    'Testing & QA',
-    'Go Live',
-    'Review & Optimisation',
+  const [stages, setStages] = useState([
+    { id: '1', name: 'Discovery & Planning' },
+    { id: '2', name: 'Setup & Configuration' },
+    { id: '3', name: 'Integration' },
+    { id: '4', name: 'Testing & QA' },
+    { id: '5', name: 'Go Live' },
+    { id: '6', name: 'Review & Optimisation' },
   ])
   const supabase = createClient()
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
   useEffect(() => {
     Promise.all([
@@ -101,7 +170,7 @@ export default function NewProjectPage() {
         priority: values.priority,
         csm_owner: values.csm_owner,
         target_completion_date: values.target_completion_date || undefined,
-        phases: stages.filter((s) => s.trim()),
+        phases: stages.map((s) => s.name).filter((n) => n.trim()),
       })
 
       if (values.template_id && values.template_id !== 'none') {
@@ -227,42 +296,48 @@ export default function NewProjectPage() {
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <Label>Project Stages</Label>
-                <span className="text-xs text-slate-400">{stages.filter(s => s.trim()).length} stages</span>
+                <span className="text-xs text-slate-400">{stages.filter(s => s.name.trim()).length} stages</span>
               </div>
-              <div className="space-y-1.5">
-                {stages.map((stage, idx) => (
-                  <div key={idx} className="flex items-center gap-2">
-                    <GripVertical className="h-4 w-4 text-slate-300 shrink-0" />
-                    <span className="text-xs text-slate-400 w-5 text-right shrink-0">{idx + 1}.</span>
-                    <Input
-                      value={stage}
-                      onChange={(e) => {
-                        const updated = [...stages]
-                        updated[idx] = e.target.value
-                        setStages(updated)
-                      }}
-                      placeholder={`Stage ${idx + 1}`}
-                      className="h-8 text-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => setStages(stages.filter((_, i) => i !== idx))}
-                      className="text-slate-300 hover:text-red-400 transition-colors shrink-0"
-                      title="Remove stage"
-                    >
-                      <X className="h-4 w-4" />
-                    </button>
+              <DndContext
+                id="stages-dnd"
+                sensors={sensors}
+                collisionDetection={closestCenter}
+                onDragEnd={(event: DragEndEvent) => {
+                  const { active, over } = event
+                  if (over && active.id !== over.id) {
+                    setStages((prev) => {
+                      const oldIdx = prev.findIndex((s) => s.id === active.id)
+                      const newIdx = prev.findIndex((s) => s.id === over.id)
+                      return arrayMove(prev, oldIdx, newIdx)
+                    })
+                  }
+                }}
+              >
+                <SortableContext items={stages.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+                  <div className="space-y-1.5">
+                    {stages.map((stage, idx) => (
+                      <SortableStageRow
+                        key={stage.id}
+                        id={stage.id}
+                        index={idx}
+                        value={stage.name}
+                        onChange={(val) =>
+                          setStages((prev) => prev.map((s) => s.id === stage.id ? { ...s, name: val } : s))
+                        }
+                        onRemove={() => setStages((prev) => prev.filter((s) => s.id !== stage.id))}
+                      />
+                    ))}
                   </div>
-                ))}
-                <button
-                  type="button"
-                  onClick={() => setStages([...stages, ''])}
-                  className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-blue-600 border border-dashed border-slate-200 hover:border-blue-300 rounded-md px-3 py-1.5 w-full transition-colors"
-                >
-                  <Plus className="h-3.5 w-3.5" />
-                  Add Stage
-                </button>
-              </div>
+                </SortableContext>
+              </DndContext>
+              <button
+                type="button"
+                onClick={() => setStages((prev) => [...prev, { id: `${Date.now()}`, name: '' }])}
+                className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-blue-600 border border-dashed border-slate-200 hover:border-blue-300 rounded-md px-3 py-1.5 w-full transition-colors"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                Add Stage
+              </button>
             </div>
 
             {/* Template */}
