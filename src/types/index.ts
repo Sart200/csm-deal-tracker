@@ -91,6 +91,8 @@ export interface ProjectSummary extends Project {
   current_phase?: PhaseSummary | null
   _open_task_count?: number
   _blocker_count?: number
+  _task_progress?: number | null   // % of tasks done (null = no tasks yet)
+  _total_tasks?: number
 }
 
 export interface ProjectWithPhases extends Project {

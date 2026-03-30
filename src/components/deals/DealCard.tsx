@@ -77,18 +77,35 @@ export function DealCard({ deal }: DealCardProps) {
             )}
           </div>
 
-          {/* Onboarding progress */}
-          <div className="space-y-1">
-            <div className="flex justify-between text-xs text-slate-500">
-              <span>Onboarding</span>
-              <span className={cn(progress === 100 ? 'text-green-600 font-medium' : '')}>
-                {progress}%
-              </span>
+          {/* Progress bars */}
+          <div className="space-y-2">
+            {/* Onboarding */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-xs text-slate-500">
+                <span>Onboarding</span>
+                <span className={cn(progress === 100 ? 'text-green-600 font-medium' : '')}>
+                  {progress}%
+                </span>
+              </div>
+              <Progress value={progress} className="h-1.5" />
             </div>
-            <Progress
-              value={progress}
-              className="h-1.5"
-            />
+
+            {/* Per-project */}
+            {(deal.projects ?? []).map((project) => {
+              const pct = project._task_progress ?? 0
+              const hasNoTasks = project._total_tasks === 0 || project._total_tasks == null
+              return (
+                <div key={project.id} className="space-y-1">
+                  <div className="flex justify-between text-xs text-slate-500">
+                    <span className="truncate max-w-[70%]">{project.name}</span>
+                    <span className={cn(pct === 100 ? 'text-green-600 font-medium' : '')}>
+                      {hasNoTasks ? '—' : `${pct}%`}
+                    </span>
+                  </div>
+                  <Progress value={hasNoTasks ? 0 : pct} className="h-1.5" />
+                </div>
+              )
+            })}
           </div>
         </CardContent>
       </Card>

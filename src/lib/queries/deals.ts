@@ -9,7 +9,10 @@ export async function getDeals(supabase: SupabaseClient): Promise<DealWithRelati
       *,
       csm:team_members!deals_csm_owner_fkey(id, name, email, role),
       ae:team_members!deals_ae_owner_fkey(id, name, email),
-      projects(id, name, status, priority),
+      projects(
+        id, name, status, priority,
+        phases(tasks(id, status))
+      ),
       onboarding_tasks(id, completed_at)
     `)
     .order("created_at", { ascending: false })
@@ -17,6 +20,19 @@ export async function getDeals(supabase: SupabaseClient): Promise<DealWithRelati
   return (data ?? []).map((d) => ({
     ...d,
     _project_count: d.projects?.length ?? 0,
+    projects: (d.projects ?? []).map((p: {
+      id: string; name: string; status: string; priority: string;
+      phases?: { tasks?: { id: string; status: string }[] }[]
+    }) => {
+      const allTasks = p.phases?.flatMap(ph => ph.tasks ?? []) ?? []
+      const doneTasks = allTasks.filter(t => t.status === 'done' || t.status === 'na').length
+      return {
+        ...p,
+        phases: undefined,
+        _task_progress: allTasks.length > 0 ? Math.round(doneTasks / allTasks.length * 100) : null,
+        _total_tasks: allTasks.length,
+      }
+    }),
   }))
 }
 
