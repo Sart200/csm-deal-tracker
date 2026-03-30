@@ -60,6 +60,18 @@ export function PhaseColumn({ phase, teamMembers, onTaskUpdate }: PhaseColumnPro
   }
 
   async function handleToggleComplete(task: TaskWithDetails) {
+    // Block completion if there are unresolved blockers linked to this task
+    if (task.status !== 'done') {
+      const unresolvedLinked = phase.blockers.filter(
+        (b) => b.task_id === task.id && b.status !== 'resolved'
+      )
+      if (unresolvedLinked.length > 0) {
+        toast.error(
+          `Cannot complete — ${unresolvedLinked.length} unresolved blocker${unresolvedLinked.length > 1 ? 's' : ''} linked to this task. Resolve them first.`
+        )
+        return
+      }
+    }
     try {
       const isDone = task.status === 'done'
       await updateTask(supabase, task.id, {
@@ -172,6 +184,7 @@ export function PhaseColumn({ phase, teamMembers, onTaskUpdate }: PhaseColumnPro
         phaseName={phase.name}
         teamMembers={teamMembers}
         task={editingTask}
+        blockers={phase.blockers}
         open={taskFormOpen}
         onOpenChange={(v) => {
           setTaskFormOpen(v)

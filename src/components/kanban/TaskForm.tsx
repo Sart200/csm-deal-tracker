@@ -5,7 +5,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod/v4'
 import { toast } from 'sonner'
-import { Trash2 } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Trash2 } from 'lucide-react'
 import {
   Dialog,
   DialogContent,
@@ -27,7 +27,9 @@ import {
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { createTask, updateTask, deleteTask } from '@/lib/queries/tasks'
-import type { TaskWithDetails, TeamMember, PriorityLevel } from '@/types'
+import { updateBlocker } from '@/lib/queries/blockers'
+import { BlockerStatusBadge } from '@/components/blockers/BlockerStatusBadge'
+import type { BlockerSummary, TaskWithDetails, TeamMember, PriorityLevel } from '@/types'
 
 const taskSchema = z.object({
   title: z.string().min(1, 'Title is required'),
@@ -44,6 +46,7 @@ interface TaskFormProps {
   phaseName: string
   teamMembers: TeamMember[]
   task?: TaskWithDetails
+  blockers?: BlockerSummary[]
   open: boolean
   onOpenChange: (open: boolean) => void
   onSuccess: () => void
@@ -60,6 +63,7 @@ export function TaskForm({
   phaseName,
   teamMembers,
   task,
+  blockers = [],
   open,
   onOpenChange,
   onSuccess,
@@ -67,6 +71,11 @@ export function TaskForm({
   const isEdit = !!task
   const [confirmDelete, setConfirmDelete] = useState(false)
   const [deleting, setDeleting] = useState(false)
+
+  // Per-blocker resolve state
+  const [resolveState, setResolveState] = useState<
+    Record<string, { loading: boolean; showNote: boolean; note: string }>
+  >({})
 
   const {
     register,
@@ -77,13 +86,7 @@ export function TaskForm({
     formState: { errors, isSubmitting },
   } = useForm<TaskFormValues>({
     resolver: zodResolver(taskSchema),
-    defaultValues: {
-      title: '',
-      assignee: undefined,
-      priority: 'medium',
-      due_date: '',
-      description: '',
-    },
+    defaultValues: { title: '', assignee: undefined, priority: 'medium', due_date: '', description: '' },
   })
 
   const priority = watch('priority')
@@ -91,6 +94,7 @@ export function TaskForm({
   useEffect(() => {
     if (open) {
       setConfirmDelete(false)
+      setResolveState({})
       if (task) {
         reset({
           title: task.title,
@@ -100,16 +104,14 @@ export function TaskForm({
           description: task.description ?? '',
         })
       } else {
-        reset({
-          title: '',
-          assignee: undefined,
-          priority: 'medium',
-          due_date: '',
-          description: '',
-        })
+        reset({ title: '', assignee: undefined, priority: 'medium', due_date: '', description: '' })
       }
     }
   }, [open, task, reset])
+
+  // Blockers linked to this task
+  const linkedBlockers = task ? blockers.filter((b) => b.task_id === task.id) : []
+  const unresolvedCount = linkedBlockers.filter((b) => b.status !== 'resolved').length
 
   async function onSubmit(values: TaskFormValues) {
     const supabase = createClient()
@@ -156,9 +158,33 @@ export function TaskForm({
     }
   }
 
+  function patchResolve(id: string, patch: Partial<{ loading: boolean; showNote: boolean; note: string }>) {
+    setResolveState((prev) => ({
+      ...prev,
+      [id]: { loading: false, showNote: false, note: '', ...prev[id], ...patch },
+    }))
+  }
+
+  async function handleResolveBlocker(blockerId: string) {
+    const state = resolveState[blockerId] ?? { loading: false, showNote: false, note: '' }
+    patchResolve(blockerId, { loading: true })
+    try {
+      const supabase = createClient()
+      await updateBlocker(supabase, blockerId, {
+        status: 'resolved',
+        resolution_notes: state.note.trim() || undefined,
+      })
+      toast.success('Blocker resolved')
+      onSuccess()
+    } catch {
+      toast.error('Failed to resolve blocker')
+      patchResolve(blockerId, { loading: false })
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{isEdit ? 'Edit Task' : 'New Task'}</DialogTitle>
           <p className="text-sm text-slate-500">
@@ -169,17 +195,9 @@ export function TaskForm({
         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4 mt-2">
           {/* Title */}
           <div className="space-y-1.5">
-            <Label htmlFor="task-title">
-              Title <span className="text-red-500">*</span>
-            </Label>
-            <Input
-              id="task-title"
-              placeholder="Task title…"
-              {...register('title')}
-            />
-            {errors.title && (
-              <p className="text-xs text-red-500">{errors.title.message}</p>
-            )}
+            <Label htmlFor="task-title">Title <span className="text-red-500">*</span></Label>
+            <Input id="task-title" placeholder="Task title…" {...register('title')} />
+            {errors.title && <p className="text-xs text-red-500">{errors.title.message}</p>}
           </div>
 
           {/* Assignee */}
@@ -197,9 +215,7 @@ export function TaskForm({
               <SelectContent>
                 <SelectItem value="unassigned">Unassigned</SelectItem>
                 {teamMembers.map((m) => (
-                  <SelectItem key={m.id} value={m.id}>
-                    {m.name}
-                  </SelectItem>
+                  <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -230,47 +246,134 @@ export function TaskForm({
           {/* Due Date */}
           <div className="space-y-1.5">
             <Label htmlFor="task-due-date">Due Date</Label>
-            <Input
-              id="task-due-date"
-              type="date"
-              {...register('due_date')}
-            />
+            <Input id="task-due-date" type="date" {...register('due_date')} />
           </div>
 
           {/* Description */}
           <div className="space-y-1.5">
             <Label htmlFor="task-description">Description</Label>
-            <Textarea
-              id="task-description"
-              placeholder="Optional task description…"
-              rows={3}
-              {...register('description')}
-            />
+            <Textarea id="task-description" placeholder="Optional task description…" rows={3} {...register('description')} />
           </div>
 
+          {/* ── Linked Blockers ─────────────────────────── */}
+          {linkedBlockers.length > 0 && (
+            <div className="space-y-2 pt-1">
+              <div className="flex items-center gap-2">
+                <Label>Blockers</Label>
+                {unresolvedCount > 0 && (
+                  <span className="text-xs font-medium text-red-500 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3" />
+                    {unresolvedCount} unresolved — task cannot be closed
+                  </span>
+                )}
+                {unresolvedCount === 0 && (
+                  <span className="text-xs text-green-600 flex items-center gap-1">
+                    <CheckCircle2 className="h-3 w-3" />
+                    All resolved
+                  </span>
+                )}
+              </div>
+
+              <div className="space-y-2">
+                {linkedBlockers.map((blocker) => {
+                  const rs = resolveState[blocker.id] ?? { loading: false, showNote: false, note: '' }
+                  const isResolved = blocker.status === 'resolved'
+
+                  return (
+                    <div
+                      key={blocker.id}
+                      className={cn(
+                        'rounded-md border px-3 py-2.5 space-y-2',
+                        isResolved ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'
+                      )}
+                    >
+                      {/* Blocker title + status */}
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className={cn('text-sm font-medium leading-snug', isResolved ? 'text-green-800' : 'text-red-800')}>
+                            {blocker.title}
+                          </p>
+                          {blocker.description && (
+                            <p className="text-xs text-slate-500 mt-0.5 line-clamp-2">{blocker.description}</p>
+                          )}
+                        </div>
+                        <BlockerStatusBadge status={blocker.status} />
+                      </div>
+
+                      {/* Resolved state */}
+                      {isResolved && (
+                        <div className="flex items-center gap-1.5 text-xs text-green-600">
+                          <CheckCircle2 className="h-3.5 w-3.5" />
+                          Resolved
+                          {blocker.resolution_notes && (
+                            <span className="text-slate-500 ml-1">· {blocker.resolution_notes}</span>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Unresolved — resolve actions */}
+                      {!isResolved && (
+                        <>
+                          {rs.showNote && (
+                            <Textarea
+                              placeholder="Resolution notes (optional)…"
+                              rows={2}
+                              className="text-xs"
+                              value={rs.note}
+                              onChange={(e) => patchResolve(blocker.id, { note: e.target.value })}
+                            />
+                          )}
+                          <div className="flex gap-2">
+                            {!rs.showNote ? (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs border-slate-300"
+                                onClick={() => patchResolve(blocker.id, { showNote: true })}
+                              >
+                                Add note
+                              </Button>
+                            ) : (
+                              <Button
+                                type="button"
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 text-xs"
+                                onClick={() => patchResolve(blocker.id, { showNote: false, note: '' })}
+                              >
+                                Cancel
+                              </Button>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="h-7 text-xs bg-green-600 hover:bg-green-700 text-white gap-1"
+                              disabled={rs.loading}
+                              onClick={() => handleResolveBlocker(blocker.id)}
+                            >
+                              <CheckCircle2 className="h-3 w-3" />
+                              {rs.loading ? 'Resolving…' : 'Mark Resolved'}
+                            </Button>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
+          )}
+
           <DialogFooter className="gap-2">
-            {/* Delete — only when editing */}
             {isEdit && (
               confirmDelete ? (
                 <div className="flex items-center gap-2 mr-auto">
                   <span className="text-xs text-red-600 font-medium">Delete this task?</span>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="destructive"
-                    className="h-7 text-xs"
-                    disabled={deleting}
-                    onClick={handleDelete}
-                  >
+                  <Button type="button" size="sm" variant="destructive" className="h-7 text-xs" disabled={deleting} onClick={handleDelete}>
                     {deleting ? 'Deleting…' : 'Yes, delete'}
                   </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    className="h-7 text-xs"
-                    onClick={() => setConfirmDelete(false)}
-                  >
+                  <Button type="button" size="sm" variant="ghost" className="h-7 text-xs" onClick={() => setConfirmDelete(false)}>
                     Cancel
                   </Button>
                 </div>
@@ -287,13 +390,7 @@ export function TaskForm({
                 </Button>
               )
             )}
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => onOpenChange(false)}
-            >
-              Cancel
-            </Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
             <Button type="submit" disabled={isSubmitting}>
               {isSubmitting ? 'Saving…' : isEdit ? 'Save Changes' : 'Create Task'}
             </Button>
