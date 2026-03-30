@@ -63,6 +63,9 @@ export interface OnboardingTask {
   completed_at: string | null
   evidence_notes: string | null
   blocker_id: string | null
+  started_at: string | null
+  due_date: string | null
+  priority: PriorityLevel
   created_at: string
   completed_by_member?: Pick<TeamMember, 'id' | 'name'> | null
   linked_blocker?: BlockerSummary | null

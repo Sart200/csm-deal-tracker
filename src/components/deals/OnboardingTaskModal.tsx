@@ -132,9 +132,9 @@ export function OnboardingTaskModal({
           evidence_type: task.evidence_type ?? 'Manual',
           evidence_notes: task.evidence_notes ?? '',
           assignee: task.completed_by ?? undefined,
-          start_date: '',
-          due_date: '',
-          priority: 'medium',
+          start_date: task.started_at ?? '',
+          due_date: task.due_date ?? '',
+          priority: task.priority ?? 'medium',
         })
       } else {
         reset({
@@ -164,6 +164,9 @@ export function OnboardingTaskModal({
           evidence_type: values.evidence_type,
           evidence_notes: values.evidence_notes?.trim() || null,
           completed_by: values.assignee || null,
+          started_at: values.start_date || null,
+          due_date: values.due_date || null,
+          priority: values.priority,
         })
         toast.success('Task updated')
       } else {
@@ -171,6 +174,9 @@ export function OnboardingTaskModal({
           owner_role: values.owner_role,
           evidence_type: values.evidence_type,
           evidence_notes: values.evidence_notes?.trim() || null,
+          started_at: values.start_date || null,
+          due_date: values.due_date || null,
+          priority: values.priority,
         })
         toast.success('Task added')
       }

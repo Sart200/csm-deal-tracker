@@ -37,6 +37,7 @@ const taskSchema = z.object({
   priority: z.enum(['high', 'medium', 'low']),
   start_date: z.string().min(1, 'Start date is required'),
   due_date: z.string().optional(),
+  completed_date: z.string().optional(),
   description: z.string().optional(),
 })
 
@@ -103,10 +104,11 @@ export function TaskForm({
           priority: task.priority,
           start_date: task.started_at ? task.started_at.split('T')[0] : '',
           due_date: task.due_date ?? '',
+          completed_date: task.completed_at ? task.completed_at.split('T')[0] : '',
           description: task.description ?? '',
         })
       } else {
-        reset({ title: '', assignee: undefined, priority: 'medium', start_date: '', due_date: '', description: '' })
+        reset({ title: '', assignee: undefined, priority: 'medium', start_date: '', due_date: '', completed_date: '', description: '' })
       }
     }
   }, [open, task, reset])
@@ -125,6 +127,7 @@ export function TaskForm({
           priority: values.priority,
           start_date: values.start_date,
           due_date: values.due_date || undefined,
+          completed_at: values.completed_date ? new Date(values.completed_date).toISOString() : task.completed_at,
           description: values.description || undefined,
         })
         toast.success('Task updated')
@@ -241,6 +244,14 @@ export function TaskForm({
               <Input id="task-due-date" type="date" {...register('due_date')} />
             </div>
           </div>
+
+          {/* Completed Date — only shown when task is done */}
+          {isEdit && task?.status === 'done' && (
+            <div className="space-y-1.5">
+              <Label htmlFor="task-completed-date">Completed Date</Label>
+              <Input id="task-completed-date" type="date" {...register('completed_date')} />
+            </div>
+          )}
 
           {/* Priority */}
           <div className="space-y-1.5">

@@ -38,7 +38,8 @@ export async function getDealById(
       ),
       onboarding_tasks(
         id, deal_id, task_number, title, owner_role, evidence_type,
-        completed_by, completed_at, evidence_notes, blocker_id, created_at,
+        completed_by, completed_at, evidence_notes, blocker_id,
+        started_at, due_date, priority, created_at,
         completed_by_member:team_members(id, name),
         linked_blocker:blockers!onboarding_tasks_blocker_id_fkey(
           id, phase_id, task_id, title, description, category,
@@ -145,6 +146,9 @@ export async function addOnboardingTask(
     owner_role?: string
     evidence_type?: string
     evidence_notes?: string | null
+    started_at?: string | null
+    due_date?: string | null
+    priority?: string
   }
 ): Promise<OnboardingTask> {
   // Get max task_number for this deal
@@ -166,6 +170,9 @@ export async function addOnboardingTask(
       owner_role: extras?.owner_role ?? "CSM",
       evidence_type: extras?.evidence_type ?? "Manual",
       evidence_notes: extras?.evidence_notes ?? null,
+      started_at: extras?.started_at ?? null,
+      due_date: extras?.due_date ?? null,
+      priority: extras?.priority ?? "medium",
     })
     .select(`*, completed_by_member:team_members(id, name)`)
     .single()
@@ -206,6 +213,9 @@ export async function updateOnboardingTask(
     completed_by?: string | null
     evidence_notes?: string | null
     blocker_id?: string | null
+    started_at?: string | null
+    due_date?: string | null
+    priority?: string
   },
   actorId?: string
 ): Promise<OnboardingTask> {
