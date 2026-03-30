@@ -159,7 +159,7 @@ export function BlockerForm({
               <Label>Blocking Task <span className="text-slate-400 font-normal">(optional)</span></Label>
               <Select
                 value={taskId ?? 'none'}
-                onValueChange={(v) => setValue('task_id', v === 'none' ? undefined : v)}
+                onValueChange={(v) => setValue('task_id', !v || v === 'none' ? undefined : v)}
               >
                 <SelectTrigger>
                   <SelectValue>

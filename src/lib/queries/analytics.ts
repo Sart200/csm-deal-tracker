@@ -146,7 +146,7 @@ export async function getProjectMovementAnalytics(supabase: SupabaseClient) {
       name: project.name,
       status: project.status as string,
       created_at: project.created_at,
-      deal: project.deal as { id: string; client_name: string } | null,
+      deal: (Array.isArray(project.deal) ? project.deal[0] : project.deal) as { id: string; client_name: string } | null,
       phases: phasesWithMetrics,
     }
   })

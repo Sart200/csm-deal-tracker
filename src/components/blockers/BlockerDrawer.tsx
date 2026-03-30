@@ -466,7 +466,7 @@ export function BlockerDrawer({
                     <Label>Blocking Task <span className="text-slate-400 font-normal">(optional)</span></Label>
                     <Select
                       value={editTaskId || 'none'}
-                      onValueChange={(v) => setEditTaskId(v === 'none' ? '' : v)}
+                      onValueChange={(v) => setEditTaskId(!v || v === 'none' ? '' : v)}
                     >
                       <SelectTrigger>
                         <SelectValue>
@@ -518,7 +518,7 @@ export function BlockerDrawer({
                 {/* Owner */}
                 <div className="space-y-1.5">
                   <Label>Owner</Label>
-                  <Select value={editOwner || 'unassigned'} onValueChange={(v) => setEditOwner(v === 'unassigned' ? '' : v)}>
+                  <Select value={editOwner || 'unassigned'} onValueChange={(v) => setEditOwner(!v || v === 'unassigned' ? '' : v)}>
                     <SelectTrigger>
                       <SelectValue>
                         {(v: string) =>
