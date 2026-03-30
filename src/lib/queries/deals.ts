@@ -193,6 +193,9 @@ export async function updateOnboardingTask(
   supabase: SupabaseClient,
   id: string,
   updates: {
+    title?: string
+    owner_role?: string
+    evidence_type?: string
     completed_at?: string | null
     completed_by?: string | null
     evidence_notes?: string | null

@@ -3,13 +3,11 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
-import { CheckCircle2, Circle, Pencil, Check, X, Plus, Trash2 } from 'lucide-react'
+import { CheckCircle2, Circle, Pencil, Plus } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Textarea } from '@/components/ui/textarea'
 import { createClient } from '@/lib/supabase/client'
 import { cn, formatDate, getInitials } from '@/lib/utils'
-import { deleteOnboardingTask } from '@/lib/queries/deals'
 import { OnboardingTaskModal } from './OnboardingTaskModal'
 import type { OnboardingTask, TeamMember } from '@/types'
 
@@ -23,10 +21,8 @@ export function OnboardingChecklist({ tasks, dealId, teamMembers }: OnboardingCh
   const router = useRouter()
   const supabase = createClient()
   const [loadingId, setLoadingId] = useState<string | null>(null)
-  const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
-  const [noteValue, setNoteValue] = useState('')
-  const [addModalOpen, setAddModalOpen] = useState(false)
-  const [deletingId, setDeletingId] = useState<string | null>(null)
+  const [modalOpen, setModalOpen] = useState(false)
+  const [editingTask, setEditingTask] = useState<OnboardingTask | null>(null)
 
   async function handleToggle(task: OnboardingTask) {
     setLoadingId(task.id)
@@ -42,8 +38,8 @@ export function OnboardingChecklist({ tasks, dealId, teamMembers }: OnboardingCh
 
       toast.success(
         isCompleting
-          ? `Task "${task.title}" marked complete`
-          : `Task "${task.title}" unmarked`
+          ? `"${task.title}" marked complete`
+          : `"${task.title}" unmarked`
       )
       router.refresh()
     } catch {
@@ -53,37 +49,14 @@ export function OnboardingChecklist({ tasks, dealId, teamMembers }: OnboardingCh
     }
   }
 
-  function startEditNote(task: OnboardingTask) {
-    setEditingNoteId(task.id)
-    setNoteValue(task.evidence_notes ?? '')
+  function openCreate() {
+    setEditingTask(null)
+    setModalOpen(true)
   }
 
-  async function saveNote(task: OnboardingTask) {
-    try {
-      await supabase
-        .from('onboarding_tasks')
-        .update({ evidence_notes: noteValue.trim() || null })
-        .eq('id', task.id)
-      toast.success('Notes saved')
-      setEditingNoteId(null)
-      router.refresh()
-    } catch {
-      toast.error('Failed to save notes')
-    }
-  }
-
-  async function handleDeleteTask(task: OnboardingTask) {
-    if (!confirm(`Delete "${task.title}"? This cannot be undone.`)) return
-    setDeletingId(task.id)
-    try {
-      await deleteOnboardingTask(supabase, task.id)
-      toast.success('Task removed')
-      router.refresh()
-    } catch {
-      toast.error('Failed to remove task')
-    } finally {
-      setDeletingId(null)
-    }
+  function openEdit(task: OnboardingTask) {
+    setEditingTask(task)
+    setModalOpen(true)
   }
 
   const completedCount = tasks.filter((t) => t.completed_at).length
@@ -98,7 +71,7 @@ export function OnboardingChecklist({ tasks, dealId, teamMembers }: OnboardingCh
           size="sm"
           variant="outline"
           className="h-7 text-xs gap-1"
-          onClick={() => setAddModalOpen(true)}
+          onClick={openCreate}
         >
           <Plus className="h-3.5 w-3.5" />
           Add Task
@@ -115,22 +88,19 @@ export function OnboardingChecklist({ tasks, dealId, teamMembers }: OnboardingCh
         {tasks.map((task) => {
           const isCompleted = !!task.completed_at
           const isLoading = loadingId === task.id
-          const isDeleting = deletingId === task.id
-          const isEditingNote = editingNoteId === task.id
 
           return (
             <div
               key={task.id}
               className={cn(
                 'group flex gap-3 px-4 py-3 transition-colors',
-                isCompleted ? 'bg-green-50/40' : 'hover:bg-slate-50',
-                isDeleting && 'opacity-50'
+                isCompleted ? 'bg-green-50/40' : 'hover:bg-slate-50'
               )}
             >
               {/* Checkbox */}
               <button
                 onClick={() => handleToggle(task)}
-                disabled={isLoading || isDeleting}
+                disabled={isLoading}
                 className="mt-0.5 shrink-0 text-slate-400 hover:text-blue-600 transition-colors disabled:opacity-50"
               >
                 {isCompleted ? (
@@ -140,7 +110,11 @@ export function OnboardingChecklist({ tasks, dealId, teamMembers }: OnboardingCh
                 )}
               </button>
 
-              <div className="flex-1 min-w-0 space-y-1">
+              {/* Content — click anywhere to edit */}
+              <div
+                className="flex-1 min-w-0 space-y-1 cursor-pointer"
+                onClick={() => openEdit(task)}
+              >
                 {/* Title row */}
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="text-xs font-medium text-slate-400 shrink-0">
@@ -164,31 +138,10 @@ export function OnboardingChecklist({ tasks, dealId, teamMembers }: OnboardingCh
                 </div>
 
                 {/* Evidence notes */}
-                {isEditingNote ? (
-                  <div className="flex gap-2 mt-1">
-                    <Textarea
-                      className="text-xs min-h-[60px] flex-1"
-                      value={noteValue}
-                      onChange={(e) => setNoteValue(e.target.value)}
-                      placeholder="Add evidence notes…"
-                    />
-                    <div className="flex flex-col gap-1">
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-green-600 hover:text-green-700" onClick={() => saveNote(task)}>
-                        <Check className="h-3.5 w-3.5" />
-                      </Button>
-                      <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-slate-600" onClick={() => setEditingNoteId(null)}>
-                        <X className="h-3.5 w-3.5" />
-                      </Button>
-                    </div>
-                  </div>
+                {task.evidence_notes ? (
+                  <p className="text-xs text-slate-500 italic">{task.evidence_notes}</p>
                 ) : (
-                  <div>
-                    {task.evidence_notes ? (
-                      <p className="text-xs text-slate-500 italic">{task.evidence_notes}</p>
-                    ) : (
-                      <p className="text-xs text-slate-300 italic">No evidence notes</p>
-                    )}
-                  </div>
+                  <p className="text-xs text-slate-300 italic">No evidence notes</p>
                 )}
 
                 {/* Completed by */}
@@ -210,35 +163,28 @@ export function OnboardingChecklist({ tasks, dealId, teamMembers }: OnboardingCh
                 )}
               </div>
 
-              {/* Action buttons — edit note + delete, always right-aligned together */}
-              <div className="shrink-0 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                <button
-                  onClick={() => startEditNote(task)}
-                  className="h-6 w-6 flex items-center justify-center rounded text-slate-300 hover:text-blue-500 transition-colors"
-                  title="Edit evidence notes"
-                >
-                  <Pencil className="h-3 w-3" />
-                </button>
-                <button
-                  onClick={() => handleDeleteTask(task)}
-                  disabled={isDeleting || isLoading}
-                  className="h-6 w-6 flex items-center justify-center rounded text-slate-300 hover:text-red-400 transition-colors disabled:opacity-30"
-                  title="Remove task"
-                >
-                  <Trash2 className="h-3.5 w-3.5" />
-                </button>
-              </div>
+              {/* Pencil — visible on hover */}
+              <button
+                onClick={() => openEdit(task)}
+                className="shrink-0 h-6 w-6 flex items-center justify-center rounded text-slate-300 hover:text-blue-500 transition-colors opacity-0 group-hover:opacity-100"
+                title="Edit task"
+              >
+                <Pencil className="h-3 w-3" />
+              </button>
             </div>
           )
         })}
-
       </div>
 
       <OnboardingTaskModal
         dealId={dealId}
         teamMembers={teamMembers}
-        open={addModalOpen}
-        onOpenChange={setAddModalOpen}
+        task={editingTask}
+        open={modalOpen}
+        onOpenChange={(open) => {
+          setModalOpen(open)
+          if (!open) setEditingTask(null)
+        }}
         onSuccess={() => router.refresh()}
       />
     </div>
