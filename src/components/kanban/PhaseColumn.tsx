@@ -216,6 +216,7 @@ export function PhaseColumn({ phase, teamMembers, onTaskUpdate }: PhaseColumnPro
           onTaskUpdate()
         }}
         teamMembers={teamMembers}
+        tasks={phase.tasks}
       />
     </div>
   )
