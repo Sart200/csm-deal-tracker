@@ -67,6 +67,9 @@ export async function createDeal(
     .single()
   if (error) throw error
 
+  // Remove any onboarding tasks auto-created by a DB trigger — user adds them manually
+  await supabase.from("onboarding_tasks").delete().eq("deal_id", deal.id)
+
   await logActivity(supabase, {
     entity_type: "deal",
     entity_id: deal.id,
