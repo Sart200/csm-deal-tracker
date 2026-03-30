@@ -188,6 +188,27 @@ export async function deletePhase(
   if (error) throw error
 }
 
+export async function updatePhase(
+  supabase: SupabaseClient,
+  phaseId: string,
+  updates: { name?: string; phase_number?: number }
+): Promise<void> {
+  const { error } = await supabase.from("phases").update(updates).eq("id", phaseId)
+  if (error) throw error
+}
+
+/** Bulk-update phase_numbers to match a given ordered list of IDs */
+export async function reorderPhases(
+  supabase: SupabaseClient,
+  orderedIds: string[]
+): Promise<void> {
+  await Promise.all(
+    orderedIds.map((id, idx) =>
+      supabase.from("phases").update({ phase_number: idx + 1 }).eq("id", id)
+    )
+  )
+}
+
 export async function updateProject(
   supabase: SupabaseClient,
   id: string,

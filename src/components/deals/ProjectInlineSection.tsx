@@ -1,9 +1,24 @@
 'use client'
 
-import { useState, useRef } from 'react'
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { useState } from 'react'
+import { Pencil, Plus, X, GripVertical } from 'lucide-react'
 import { useRouter } from 'next/navigation'
 import { toast } from 'sonner'
+import {
+  DndContext,
+  closestCenter,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from '@dnd-kit/core'
+import {
+  SortableContext,
+  useSortable,
+  verticalListSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable'
+import { CSS } from '@dnd-kit/utilities'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
@@ -13,10 +28,21 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ProjectStatusBadge } from '@/components/projects/ProjectStatusBadge'
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
-import { cn, getInitials, getPriorityClasses, getPriorityLabel, formatDate, getProjectTimeline, getDaysOpen, getProjectEffectiveStartDate } from '@/lib/utils'
+import {
+  cn,
+  getInitials,
+  getPriorityClasses,
+  getPriorityLabel,
+  formatDate,
+  getProjectTimeline,
+  getDaysOpen,
+  getProjectEffectiveStartDate,
+} from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
-import { updateProject, addPhase, deletePhase } from '@/lib/queries/projects'
+import { updateProject, addPhase, deletePhase, updatePhase, reorderPhases } from '@/lib/queries/projects'
 import type { ProjectWithPhases, TeamMember, ProjectStatus, PriorityLevel } from '@/types'
+
+// ── Types ──────────────────────────────────────────────────────────────────────
 
 const PROJECT_STATUSES: { value: ProjectStatus; label: string }[] = [
   { value: 'active', label: 'Active' },
@@ -31,6 +57,71 @@ const PRIORITIES: { value: PriorityLevel; label: string }[] = [
   { value: 'low', label: 'Low' },
 ]
 
+type LocalPhase = {
+  _key: string          // stable id for dnd + react key
+  id: string | null     // null = new (not yet saved)
+  name: string
+  hasTasks: boolean     // can't delete if true
+}
+
+// ── Sortable stage row (inside Edit dialog) ────────────────────────────────────
+
+function SortablePhaseRow({
+  phase,
+  index,
+  onChange,
+  onRemove,
+}: {
+  phase: LocalPhase
+  index: number
+  onChange: (name: string) => void
+  onRemove: () => void
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
+    useSortable({ id: phase._key })
+  const style = { transform: CSS.Transform.toString(transform), transition }
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={cn('flex items-center gap-2', isDragging && 'opacity-50')}
+    >
+      <button
+        type="button"
+        {...attributes}
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 transition-colors shrink-0 touch-none"
+      >
+        <GripVertical className="h-4 w-4" />
+      </button>
+      <span className="text-xs text-slate-400 w-5 text-right shrink-0">{index + 1}.</span>
+      <Input
+        value={phase.name}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={`Stage ${index + 1}`}
+        className="h-8 text-sm flex-1"
+      />
+      <button
+        type="button"
+        onClick={onRemove}
+        disabled={phase.hasTasks}
+        className={cn(
+          'shrink-0 transition-colors',
+          phase.hasTasks
+            ? 'text-slate-200 cursor-not-allowed'
+            : 'text-slate-300 hover:text-red-400'
+        )}
+        title={phase.hasTasks ? 'Remove all tasks first' : 'Remove stage'}
+      >
+        <X className="h-4 w-4" />
+      </button>
+    </div>
+  )
+}
+
+// ── Edit Project Dialog ────────────────────────────────────────────────────────
+
 interface EditProjectDialogProps {
   project: ProjectWithPhases
   teamMembers: TeamMember[]
@@ -41,6 +132,8 @@ interface EditProjectDialogProps {
 function EditProjectDialog({ project, teamMembers, open, onOpenChange }: EditProjectDialogProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+
+  // Project fields
   const [name, setName] = useState(project.name)
   const [description, setDescription] = useState(project.description ?? '')
   const [csmOwner, setCsmOwner] = useState(project.csm_owner ?? '')
@@ -48,7 +141,27 @@ function EditProjectDialog({ project, teamMembers, open, onOpenChange }: EditPro
   const [status, setStatus] = useState<ProjectStatus>(project.status)
   const [targetDate, setTargetDate] = useState(project.target_completion_date ?? '')
 
-  // Reset on open
+  // Stages (local editable copy)
+  const [localPhases, setLocalPhases] = useState<LocalPhase[]>(() =>
+    buildLocalPhases(project)
+  )
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } })
+  )
+
+  function buildLocalPhases(p: ProjectWithPhases): LocalPhase[] {
+    return [...p.phases]
+      .sort((a, b) => a.phase_number - b.phase_number)
+      .map((ph) => ({
+        _key: ph.id,
+        id: ph.id,
+        name: ph.name,
+        hasTasks: (ph.tasks?.length ?? 0) > 0,
+      }))
+  }
+
+  // Reset everything when dialog opens
   function handleOpenChange(v: boolean) {
     if (v) {
       setName(project.name)
@@ -57,29 +170,91 @@ function EditProjectDialog({ project, teamMembers, open, onOpenChange }: EditPro
       setPriority(project.priority)
       setStatus(project.status)
       setTargetDate(project.target_completion_date ?? '')
+      setLocalPhases(buildLocalPhases(project))
     }
     onOpenChange(v)
+  }
+
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event
+    if (over && active.id !== over.id) {
+      setLocalPhases((prev) => {
+        const oldIdx = prev.findIndex((p) => p._key === active.id)
+        const newIdx = prev.findIndex((p) => p._key === over.id)
+        return arrayMove(prev, oldIdx, newIdx)
+      })
+    }
+  }
+
+  function addNewStage() {
+    const key = `new-${Date.now()}`
+    setLocalPhases((prev) => [...prev, { _key: key, id: null, name: '', hasTasks: false }])
+  }
+
+  function removeStage(key: string) {
+    setLocalPhases((prev) => prev.filter((p) => p._key !== key))
+  }
+
+  function renameStage(key: string, newName: string) {
+    setLocalPhases((prev) =>
+      prev.map((p) => (p._key === key ? { ...p, name: newName } : p))
+    )
   }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
     if (!name.trim()) return
     setLoading(true)
+
     try {
       const supabase = createClient()
+
+      // 1. Update project metadata
       await updateProject(supabase, project.id, {
         name: name.trim(),
-        description: description || undefined,
+        description: description.trim() || undefined,
         csm_owner: csmOwner || undefined,
         priority,
         status,
         target_completion_date: targetDate || undefined,
       })
+
+      // 2. Delete removed phases
+      const keptIds = new Set(localPhases.map((p) => p.id).filter(Boolean))
+      const toDelete = project.phases.filter((ph) => !keptIds.has(ph.id))
+      for (const ph of toDelete) {
+        await deletePhase(supabase, ph.id)
+      }
+
+      // 3. Rename changed phases
+      const originalByKey = Object.fromEntries(project.phases.map((ph) => [ph.id, ph]))
+      for (const lp of localPhases) {
+        if (lp.id && originalByKey[lp.id] && originalByKey[lp.id].name !== lp.name.trim()) {
+          await updatePhase(supabase, lp.id, { name: lp.name.trim() })
+        }
+      }
+
+      // 4. Add new phases (in order they appear in localPhases)
+      const newPhases = localPhases.filter((p) => p.id === null && p.name.trim())
+      for (const np of newPhases) {
+        const created = await addPhase(supabase, project.id, np.name.trim())
+        // Update local id so reorder step can include it
+        np.id = created.id
+      }
+
+      // 5. Reorder all remaining phases to match localPhases order
+      const finalIds = localPhases
+        .filter((p) => p.id !== null)
+        .map((p) => p.id as string)
+      if (finalIds.length > 0) {
+        await reorderPhases(supabase, finalIds)
+      }
+
       toast.success('Project updated')
       onOpenChange(false)
       router.refresh()
-    } catch {
-      toast.error('Failed to update project')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to update project')
     } finally {
       setLoading(false)
     }
@@ -87,15 +262,17 @@ function EditProjectDialog({ project, teamMembers, open, onOpenChange }: EditPro
 
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      <DialogContent className="sm:max-w-lg">
+      <DialogContent className="sm:max-w-lg max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Edit Project</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 mt-2">
-          {/* Name */}
+          {/* Project Name */}
           <div className="space-y-1.5">
-            <Label htmlFor="edit-proj-name">Project Name <span className="text-red-500">*</span></Label>
+            <Label htmlFor="edit-proj-name">
+              Project Name <span className="text-red-500">*</span>
+            </Label>
             <Input
               id="edit-proj-name"
               value={name}
@@ -105,30 +282,66 @@ function EditProjectDialog({ project, teamMembers, open, onOpenChange }: EditPro
             />
           </div>
 
-          {/* CSM Owner + Status */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>CSM Owner</Label>
-              <Select value={csmOwner} onValueChange={(v) => setCsmOwner(v ?? '')}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select CSM Owner">
-                    {(v: string) => v ? (teamMembers.find(m => m.id === v)?.name ?? v) : 'Select CSM Owner'}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {teamMembers.map((m) => (
-                    <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+          {/* Description */}
+          <div className="space-y-1.5">
+            <Label htmlFor="edit-proj-desc">Description (optional)</Label>
+            <Textarea
+              id="edit-proj-desc"
+              placeholder="What is this project about?"
+              rows={2}
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
+          </div>
 
+          {/* Priority */}
+          <div className="space-y-1.5">
+            <Label>Priority</Label>
+            <div className="flex gap-2">
+              {PRIORITIES.map((p) => (
+                <button
+                  key={p.value}
+                  type="button"
+                  onClick={() => setPriority(p.value)}
+                  className={cn(
+                    'flex-1 py-1.5 text-sm font-medium rounded-md border transition-colors',
+                    p.value === 'high' && 'border-red-300 bg-red-50 text-red-700',
+                    p.value === 'medium' && 'border-yellow-300 bg-yellow-50 text-yellow-700',
+                    p.value === 'low' && 'border-slate-200 bg-slate-50 text-slate-500',
+                    priority === p.value && 'ring-2 ring-offset-1 ring-blue-400',
+                  )}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* CSM Owner */}
+          <div className="space-y-1.5">
+            <Label>CSM Owner</Label>
+            <Select value={csmOwner} onValueChange={(v) => setCsmOwner(v ?? '')}>
+              <SelectTrigger>
+                <SelectValue placeholder="Select CSM Owner">
+                  {(v: string) => v ? (teamMembers.find((m) => m.id === v)?.name ?? v) : 'Select CSM Owner'}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {teamMembers.map((m) => (
+                  <SelectItem key={m.id} value={m.id}>{m.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Status + Target Date */}
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label>Status</Label>
               <Select value={status} onValueChange={(v) => setStatus((v ?? 'active') as ProjectStatus)}>
                 <SelectTrigger>
                   <SelectValue>
-                    {(v: string) => PROJECT_STATUSES.find(s => s.value === v)?.label ?? v}
+                    {(v: string) => PROJECT_STATUSES.find((s) => s.value === v)?.label ?? v}
                   </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
@@ -137,34 +350,6 @@ function EditProjectDialog({ project, teamMembers, open, onOpenChange }: EditPro
                   ))}
                 </SelectContent>
               </Select>
-            </div>
-          </div>
-
-          {/* Priority + Target Date */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1.5">
-              <Label>Priority</Label>
-              <div className="flex gap-2">
-                {PRIORITIES.map((p) => (
-                  <button
-                    key={p.value}
-                    type="button"
-                    onClick={() => setPriority(p.value)}
-                    className={cn(
-                      'flex-1 py-1.5 text-xs font-medium rounded-md border transition-colors',
-                      p.value === 'high' && 'border-red-200 text-red-600 hover:bg-red-50',
-                      p.value === 'medium' && 'border-yellow-200 text-yellow-600 hover:bg-yellow-50',
-                      p.value === 'low' && 'border-slate-200 text-slate-500 hover:bg-slate-50',
-                      priority === p.value && 'ring-2 ring-offset-1 ring-blue-400',
-                      p.value === 'high' && priority === p.value && 'bg-red-50',
-                      p.value === 'medium' && priority === p.value && 'bg-yellow-50',
-                      p.value === 'low' && priority === p.value && 'bg-slate-50',
-                    )}
-                  >
-                    {p.label}
-                  </button>
-                ))}
-              </div>
             </div>
 
             <div className="space-y-1.5">
@@ -178,20 +363,53 @@ function EditProjectDialog({ project, teamMembers, open, onOpenChange }: EditPro
             </div>
           </div>
 
-          {/* Description */}
-          <div className="space-y-1.5">
-            <Label htmlFor="edit-proj-desc">Description</Label>
-            <Textarea
-              id="edit-proj-desc"
-              placeholder="What is this project about?"
-              rows={2}
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
+          {/* Project Stages */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label>Project Stages</Label>
+              <span className="text-xs text-slate-400">
+                {localPhases.filter((p) => p.name.trim()).length} stages
+              </span>
+            </div>
+
+            <DndContext
+              id="edit-stages-dnd"
+              sensors={sensors}
+              collisionDetection={closestCenter}
+              onDragEnd={handleDragEnd}
+            >
+              <SortableContext
+                items={localPhases.map((p) => p._key)}
+                strategy={verticalListSortingStrategy}
+              >
+                <div className="space-y-1.5">
+                  {localPhases.map((phase, idx) => (
+                    <SortablePhaseRow
+                      key={phase._key}
+                      phase={phase}
+                      index={idx}
+                      onChange={(val) => renameStage(phase._key, val)}
+                      onRemove={() => removeStage(phase._key)}
+                    />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+
+            <button
+              type="button"
+              onClick={addNewStage}
+              className="flex items-center gap-1.5 text-xs text-slate-400 hover:text-blue-600 border border-dashed border-slate-200 hover:border-blue-300 rounded-md px-3 py-1.5 w-full transition-colors"
+            >
+              <Plus className="h-3.5 w-3.5" />
+              Add Stage
+            </button>
           </div>
 
           <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
+            <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
             <Button type="submit" disabled={loading}>
               {loading ? 'Saving…' : 'Save Changes'}
             </Button>
@@ -210,47 +428,9 @@ interface ProjectInlineSectionProps {
 }
 
 export function ProjectInlineSection({ project, teamMembers }: ProjectInlineSectionProps) {
-  const router = useRouter()
-  const supabase = createClient()
   const [editOpen, setEditOpen] = useState(false)
-  const [addingStage, setAddingStage] = useState(false)
-  const [newStageName, setNewStageName] = useState('')
-  const [addingStageLoading, setAddingStageLoading] = useState(false)
-  const [deletingPhaseId, setDeletingPhaseId] = useState<string | null>(null)
-  const stageInputRef = useRef<HTMLInputElement>(null)
   const priorityClasses = getPriorityClasses(project.priority)
-  // Effective start = earliest task-driven phase.started_at, else project.created_at
   const effectiveStartDate = getProjectEffectiveStartDate(project.phases, project.created_at)
-
-  async function handleAddStage() {
-    if (!newStageName.trim()) return
-    setAddingStageLoading(true)
-    try {
-      await addPhase(supabase, project.id, newStageName.trim())
-      toast.success('Stage added')
-      setNewStageName('')
-      setAddingStage(false)
-      router.refresh()
-    } catch {
-      toast.error('Failed to add stage')
-    } finally {
-      setAddingStageLoading(false)
-    }
-  }
-
-  async function handleDeletePhase(phaseId: string, phaseName: string) {
-    if (!confirm(`Delete stage "${phaseName}"? This cannot be undone.\n\nNote: stages with tasks cannot be deleted.`)) return
-    setDeletingPhaseId(phaseId)
-    try {
-      await deletePhase(supabase, phaseId)
-      toast.success('Stage removed')
-      router.refresh()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to remove stage')
-    } finally {
-      setDeletingPhaseId(null)
-    }
-  }
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white overflow-hidden">
@@ -280,7 +460,6 @@ export function ProjectInlineSection({ project, teamMembers }: ProjectInlineSect
                   <span>{project.csm.name}</span>
                 </div>
               )}
-              {/* Start date + running timeline (driven by earliest task start date) */}
               <span className="text-xs text-slate-400">
                 Started {formatDate(effectiveStartDate)}
               </span>
@@ -312,62 +491,33 @@ export function ProjectInlineSection({ project, teamMembers }: ProjectInlineSect
         </div>
       </div>
 
-      {/* Stage management bar */}
-      <div className="px-4 pt-3 pb-1 flex flex-wrap items-center gap-2 border-b border-slate-100">
+      {/* Stage overview bar — read-only status pills */}
+      <div className="px-4 pt-3 pb-2 flex flex-wrap items-center gap-2 border-b border-slate-100">
         <span className="text-xs font-medium text-slate-500 mr-1">Stages:</span>
-        {project.phases.map((phase) => (
-          <div
-            key={phase.id}
-            className={cn(
-              'group flex items-center gap-1 text-xs rounded-full px-2.5 py-1 border',
-              phase.status === 'completed' ? 'bg-blue-50 border-blue-200 text-blue-700' :
-              phase.status === 'in_progress' ? 'bg-amber-50 border-amber-200 text-amber-700' :
-              phase.status === 'skipped' ? 'bg-slate-100 border-slate-200 text-slate-400 line-through' :
-              'bg-white border-slate-200 text-slate-600',
-              deletingPhaseId === phase.id && 'opacity-40'
-            )}
-          >
-            <span>{phase.name}</span>
-            <button
-              onClick={() => handleDeletePhase(phase.id, phase.name)}
-              disabled={deletingPhaseId === phase.id}
-              className="ml-0.5 opacity-0 group-hover:opacity-100 text-slate-300 hover:text-red-400 transition-all"
-              title="Remove stage"
+        {project.phases
+          .sort((a, b) => a.phase_number - b.phase_number)
+          .map((phase) => (
+            <span
+              key={phase.id}
+              className={cn(
+                'text-xs rounded-full px-2.5 py-1 border',
+                phase.status === 'completed'  ? 'bg-green-50 border-green-200 text-green-700' :
+                phase.status === 'in_progress' ? 'bg-amber-50 border-amber-200 text-amber-700' :
+                phase.status === 'blocked'     ? 'bg-orange-50 border-orange-200 text-orange-700' :
+                phase.status === 'skipped'     ? 'bg-slate-100 border-slate-200 text-slate-400 line-through' :
+                'bg-white border-slate-200 text-slate-500'
+              )}
             >
-              <Trash2 className="h-2.5 w-2.5" />
-            </button>
-          </div>
-        ))}
-
-        {addingStage ? (
-          <div className="flex items-center gap-1.5">
-            <Input
-              ref={stageInputRef}
-              value={newStageName}
-              onChange={(e) => setNewStageName(e.target.value)}
-              placeholder="Stage name…"
-              className="h-6 text-xs w-32 px-2"
-              onKeyDown={(e) => {
-                if (e.key === 'Enter') handleAddStage()
-                if (e.key === 'Escape') { setAddingStage(false); setNewStageName('') }
-              }}
-            />
-            <Button size="sm" className="h-6 text-xs px-2" onClick={handleAddStage} disabled={addingStageLoading || !newStageName.trim()}>
-              {addingStageLoading ? '…' : 'Add'}
-            </Button>
-            <Button size="sm" variant="ghost" className="h-6 text-xs px-2" onClick={() => { setAddingStage(false); setNewStageName('') }}>
-              Cancel
-            </Button>
-          </div>
-        ) : (
-          <button
-            onClick={() => { setAddingStage(true); setTimeout(() => stageInputRef.current?.focus(), 50) }}
-            className="flex items-center gap-1 text-xs text-slate-400 hover:text-blue-600 border border-dashed border-slate-200 hover:border-blue-300 rounded-full px-2.5 py-1 transition-colors"
-          >
-            <Plus className="h-3 w-3" />
-            Add Stage
-          </button>
-        )}
+              {phase.name}
+            </span>
+          ))}
+        <button
+          onClick={() => setEditOpen(true)}
+          className="flex items-center gap-1 text-xs text-slate-400 hover:text-blue-600 border border-dashed border-slate-200 hover:border-blue-300 rounded-full px-2.5 py-1 transition-colors"
+        >
+          <Pencil className="h-3 w-3" />
+          Edit stages
+        </button>
       </div>
 
       {/* Kanban board */}
