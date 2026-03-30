@@ -49,12 +49,36 @@ export async function getCSMPerformance(supabase: SupabaseClient) {
         .lt("due_date", new Date().toISOString().split("T")[0])
         .not("status", "in", '("done","na")')
 
-      // Open blockers they own
-      const { count: openBlockers } = await supabase
-        .from("blockers")
-        .select("id", { count: "exact", head: true })
-        .eq("owner", m.id)
-        .not("status", "eq", "resolved")
+      // Open blockers in this CSM's projects
+      // Step 1: get all project IDs owned by this CSM
+      const { data: ownedProjects } = await supabase
+        .from("projects")
+        .select("id")
+        .eq("csm_owner", m.id)
+
+      const projectIds = (ownedProjects ?? []).map((p) => p.id)
+
+      let openBlockers = 0
+      if (projectIds.length > 0) {
+        // Step 2: get phase IDs in those projects
+        const { data: phases } = await supabase
+          .from("phases")
+          .select("id")
+          .in("project_id", projectIds)
+
+        const phaseIds = (phases ?? []).map((p) => p.id)
+
+        if (phaseIds.length > 0) {
+          // Step 3: count unresolved blockers in those phases
+          const { count } = await supabase
+            .from("blockers")
+            .select("id", { count: "exact", head: true })
+            .in("phase_id", phaseIds)
+            .neq("status", "resolved")
+
+          openBlockers = count ?? 0
+        }
+      }
 
       return {
         ...m,
