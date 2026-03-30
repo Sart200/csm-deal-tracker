@@ -195,37 +195,21 @@ export function OnboardingChecklist({ tasks, dealId, teamMembers }: OnboardingCh
                       placeholder="Add evidence notes…"
                     />
                     <div className="flex flex-col gap-1">
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 text-green-600 hover:text-green-700"
-                        onClick={() => saveNote(task)}
-                      >
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-green-600 hover:text-green-700" onClick={() => saveNote(task)}>
                         <Check className="h-3.5 w-3.5" />
                       </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        className="h-7 w-7 text-slate-400 hover:text-slate-600"
-                        onClick={() => setEditingNoteId(null)}
-                      >
+                      <Button size="icon" variant="ghost" className="h-7 w-7 text-slate-400 hover:text-slate-600" onClick={() => setEditingNoteId(null)}>
                         <X className="h-3.5 w-3.5" />
                       </Button>
                     </div>
                   </div>
                 ) : (
-                  <div className="flex items-start gap-1.5">
+                  <div>
                     {task.evidence_notes ? (
-                      <p className="text-xs text-slate-500 italic flex-1">{task.evidence_notes}</p>
+                      <p className="text-xs text-slate-500 italic">{task.evidence_notes}</p>
                     ) : (
-                      <p className="text-xs text-slate-300 italic flex-1">No evidence notes</p>
+                      <p className="text-xs text-slate-300 italic">No evidence notes</p>
                     )}
-                    <button
-                      onClick={() => startEditNote(task)}
-                      className="shrink-0 text-slate-300 hover:text-blue-500 transition-colors"
-                    >
-                      <Pencil className="h-3 w-3" />
-                    </button>
                   </div>
                 )}
 
@@ -248,15 +232,24 @@ export function OnboardingChecklist({ tasks, dealId, teamMembers }: OnboardingCh
                 )}
               </div>
 
-              {/* Delete button */}
-              <button
-                onClick={() => handleDeleteTask(task)}
-                disabled={isDeleting || isLoading}
-                className="shrink-0 mt-0.5 text-slate-200 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all disabled:opacity-30"
-                title="Remove task"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
+              {/* Action buttons — edit note + delete, always right-aligned together */}
+              <div className="shrink-0 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                <button
+                  onClick={() => startEditNote(task)}
+                  className="h-6 w-6 flex items-center justify-center rounded text-slate-300 hover:text-blue-500 transition-colors"
+                  title="Edit evidence notes"
+                >
+                  <Pencil className="h-3 w-3" />
+                </button>
+                <button
+                  onClick={() => handleDeleteTask(task)}
+                  disabled={isDeleting || isLoading}
+                  className="h-6 w-6 flex items-center justify-center rounded text-slate-300 hover:text-red-400 transition-colors disabled:opacity-30"
+                  title="Remove task"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </button>
+              </div>
             </div>
           )
         })}
