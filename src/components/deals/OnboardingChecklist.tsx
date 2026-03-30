@@ -1,16 +1,16 @@
 'use client'
 
-import { useState, useRef } from 'react'
+import { useState } from 'react'
 import { toast } from 'sonner'
 import { useRouter } from 'next/navigation'
 import { CheckCircle2, Circle, Pencil, Check, X, Plus, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { createClient } from '@/lib/supabase/client'
 import { cn, formatDate, getInitials } from '@/lib/utils'
-import { addOnboardingTask, deleteOnboardingTask } from '@/lib/queries/deals'
+import { deleteOnboardingTask } from '@/lib/queries/deals'
+import { OnboardingTaskModal } from './OnboardingTaskModal'
 import type { OnboardingTask, TeamMember } from '@/types'
 
 interface OnboardingChecklistProps {
@@ -25,11 +25,8 @@ export function OnboardingChecklist({ tasks, dealId, teamMembers }: OnboardingCh
   const [loadingId, setLoadingId] = useState<string | null>(null)
   const [editingNoteId, setEditingNoteId] = useState<string | null>(null)
   const [noteValue, setNoteValue] = useState('')
-  const [addingTask, setAddingTask] = useState(false)
-  const [newTaskTitle, setNewTaskTitle] = useState('')
-  const [addingLoading, setAddingLoading] = useState(false)
+  const [addModalOpen, setAddModalOpen] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
 
   async function handleToggle(task: OnboardingTask) {
     setLoadingId(task.id)
@@ -75,22 +72,6 @@ export function OnboardingChecklist({ tasks, dealId, teamMembers }: OnboardingCh
     }
   }
 
-  async function handleAddTask() {
-    if (!newTaskTitle.trim()) return
-    setAddingLoading(true)
-    try {
-      await addOnboardingTask(supabase, dealId, newTaskTitle.trim())
-      toast.success('Task added')
-      setNewTaskTitle('')
-      setAddingTask(false)
-      router.refresh()
-    } catch {
-      toast.error('Failed to add task')
-    } finally {
-      setAddingLoading(false)
-    }
-  }
-
   async function handleDeleteTask(task: OnboardingTask) {
     if (!confirm(`Delete "${task.title}"? This cannot be undone.`)) return
     setDeletingId(task.id)
@@ -117,10 +98,7 @@ export function OnboardingChecklist({ tasks, dealId, teamMembers }: OnboardingCh
           size="sm"
           variant="outline"
           className="h-7 text-xs gap-1"
-          onClick={() => {
-            setAddingTask(true)
-            setTimeout(() => inputRef.current?.focus(), 50)
-          }}
+          onClick={() => setAddModalOpen(true)}
         >
           <Plus className="h-3.5 w-3.5" />
           Add Task
@@ -128,7 +106,7 @@ export function OnboardingChecklist({ tasks, dealId, teamMembers }: OnboardingCh
       </div>
 
       <div className="divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white overflow-hidden">
-        {tasks.length === 0 && !addingTask && (
+        {tasks.length === 0 && (
           <div className="py-12 text-center text-sm text-slate-400">
             No onboarding tasks yet. Click &ldquo;Add Task&rdquo; to get started.
           </div>
@@ -254,44 +232,15 @@ export function OnboardingChecklist({ tasks, dealId, teamMembers }: OnboardingCh
           )
         })}
 
-        {/* Add new task inline */}
-        {addingTask && (
-          <div className="flex gap-3 px-4 py-3 bg-blue-50/40">
-            <div className="mt-0.5 shrink-0 text-slate-300">
-              <Circle className="h-5 w-5" />
-            </div>
-            <div className="flex-1 flex gap-2">
-              <Input
-                ref={inputRef}
-                value={newTaskTitle}
-                onChange={(e) => setNewTaskTitle(e.target.value)}
-                placeholder="Task title…"
-                className="h-7 text-sm"
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleAddTask()
-                  if (e.key === 'Escape') { setAddingTask(false); setNewTaskTitle('') }
-                }}
-              />
-              <Button
-                size="sm"
-                className="h-7 text-xs"
-                onClick={handleAddTask}
-                disabled={addingLoading || !newTaskTitle.trim()}
-              >
-                {addingLoading ? '…' : 'Add'}
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 text-xs"
-                onClick={() => { setAddingTask(false); setNewTaskTitle('') }}
-              >
-                Cancel
-              </Button>
-            </div>
-          </div>
-        )}
       </div>
+
+      <OnboardingTaskModal
+        dealId={dealId}
+        teamMembers={teamMembers}
+        open={addModalOpen}
+        onOpenChange={setAddModalOpen}
+        onSuccess={() => router.refresh()}
+      />
     </div>
   )
 }

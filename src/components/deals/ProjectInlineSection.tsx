@@ -13,7 +13,7 @@ import { Textarea } from '@/components/ui/textarea'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ProjectStatusBadge } from '@/components/projects/ProjectStatusBadge'
 import { KanbanBoard } from '@/components/kanban/KanbanBoard'
-import { cn, getInitials, getPriorityClasses, getPriorityLabel, formatDate } from '@/lib/utils'
+import { cn, getInitials, getPriorityClasses, getPriorityLabel, formatDate, getProjectTimeline, getDaysOpen } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { updateProject, addPhase, deletePhase } from '@/lib/queries/projects'
 import type { ProjectWithPhases, TeamMember, ProjectStatus, PriorityLevel } from '@/types'
@@ -278,6 +278,14 @@ export function ProjectInlineSection({ project, teamMembers }: ProjectInlineSect
                   <span>{project.csm.name}</span>
                 </div>
               )}
+              {/* Start date + running timeline */}
+              <span className="text-xs text-slate-400">
+                Started {formatDate(project.created_at)}
+              </span>
+              <span className="inline-flex items-center gap-1 text-xs font-medium text-blue-600 bg-blue-50 border border-blue-100 rounded-full px-2 py-0.5">
+                {getProjectTimeline(project.created_at)}
+                <span className="font-normal text-blue-400">({getDaysOpen(project.created_at)}d)</span>
+              </span>
               {project.target_completion_date && (
                 <span className="text-xs text-slate-400">
                   Target: {formatDate(project.target_completion_date)}

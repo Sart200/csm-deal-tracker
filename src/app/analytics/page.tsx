@@ -1,13 +1,17 @@
-import { BarChart3, TrendingUp, SkipForward } from 'lucide-react'
+import { BarChart3, TrendingUp, SkipForward, GitBranch } from 'lucide-react'
 import { createClient } from '@/lib/supabase/server'
-import { getPipelineMetrics } from '@/lib/queries/analytics'
+import { getPipelineMetrics, getProjectMovementAnalytics } from '@/lib/queries/analytics'
 import { AnalyticsCharts } from './AnalyticsCharts'
+import { ProjectMovementTable } from './ProjectMovementTable'
 
 export const metadata = { title: 'Analytics — CSM Tracker' }
 
 export default async function AnalyticsPage() {
   const supabase = await createClient()
-  const { avgPhaseTime, skipRates } = await getPipelineMetrics(supabase)
+  const [{ avgPhaseTime, skipRates }, projectMovement] = await Promise.all([
+    getPipelineMetrics(supabase),
+    getProjectMovementAnalytics(supabase),
+  ])
 
   return (
     <div className="p-6 max-w-7xl mx-auto space-y-6">
@@ -114,6 +118,20 @@ export default async function AnalyticsPage() {
           </table>
         </div>
       )}
+
+      {/* Project Phase Movement — per deal, per project */}
+      <div className="bg-white rounded-xl border border-slate-200 p-5">
+        <div className="flex items-center gap-2 mb-4">
+          <GitBranch className="h-4 w-4 text-blue-600" />
+          <div>
+            <h2 className="text-sm font-semibold text-slate-700">Project Phase Movement</h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Days spent in each phase and transition time between stages, grouped by deal
+            </p>
+          </div>
+        </div>
+        <ProjectMovementTable projects={projectMovement} />
+      </div>
     </div>
   )
 }

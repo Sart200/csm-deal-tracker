@@ -94,6 +94,64 @@ export async function getCSMPerformance(supabase: SupabaseClient) {
   return results
 }
 
+export async function getProjectMovementAnalytics(supabase: SupabaseClient) {
+  const { data: projects } = await supabase
+    .from("projects")
+    .select(`
+      id, name, status, created_at,
+      deal:deals(id, client_name),
+      phases(id, phase_number, name, status, started_at, completed_at, skipped_at)
+    `)
+    .order("created_at", { ascending: false })
+
+  if (!projects) return []
+
+  return projects.map((project) => {
+    const sortedPhases = [...(project.phases ?? [])].sort(
+      (a, b) => a.phase_number - b.phase_number
+    )
+
+    const phasesWithMetrics = sortedPhases.map((phase, idx) => {
+      const startDate = phase.started_at ? new Date(phase.started_at) : null
+      const endDate = phase.completed_at
+        ? new Date(phase.completed_at)
+        : phase.skipped_at
+        ? new Date(phase.skipped_at)
+        : null
+
+      // Days spent in phase: if still active use today; if finished use end date
+      let daysInPhase: number | null = null
+      if (startDate) {
+        const compareTo = endDate ?? new Date()
+        daysInPhase = Math.round(
+          (compareTo.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)
+        )
+      }
+
+      // Transition gap: time between this phase ending and next phase starting
+      let transitionDays: number | null = null
+      const nextPhase = sortedPhases[idx + 1]
+      if (endDate && nextPhase?.started_at) {
+        const nextStart = new Date(nextPhase.started_at)
+        transitionDays = Math.round(
+          (nextStart.getTime() - endDate.getTime()) / (1000 * 60 * 60 * 24)
+        )
+      }
+
+      return { ...phase, days_in_phase: daysInPhase, transition_days: transitionDays }
+    })
+
+    return {
+      id: project.id,
+      name: project.name,
+      status: project.status as string,
+      created_at: project.created_at,
+      deal: project.deal as { id: string; client_name: string } | null,
+      phases: phasesWithMetrics,
+    }
+  })
+}
+
 export async function getPipelineMetrics(supabase: SupabaseClient) {
   // Phase time analysis — avg days per phase across all completed phases
   const { data: completedPhases } = await supabase

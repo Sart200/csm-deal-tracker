@@ -8,6 +8,9 @@ import {
   getPriorityClasses,
   getPriorityLabel,
   getTimeInPhase,
+  formatDate,
+  getProjectTimeline,
+  getDaysOpen,
 } from '@/lib/utils'
 import type { ProjectSummary } from '@/types'
 
@@ -63,6 +66,16 @@ export function ProjectCard({ project }: ProjectCardProps) {
             ) : (
               <p className="text-xs text-slate-400">Not started</p>
             )}
+          </div>
+
+          {/* Start date + timeline */}
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-xs text-slate-400">
+              Started {formatDate(project.created_at)}
+            </span>
+            <span className="text-xs font-medium text-blue-600 bg-blue-50 rounded-full px-2 py-0.5">
+              {getProjectTimeline(project.created_at)} · {getDaysOpen(project.created_at)}d
+            </span>
           </div>
 
           {/* CSM Owner */}

@@ -65,6 +65,26 @@ export function getTimeInPhase(startedAt: string | null | undefined): string {
   return `${days} days`
 }
 
+export function getProjectTimeline(createdAt: string | null | undefined): string {
+  if (!createdAt) return "—"
+  const d = parseISO(createdAt)
+  if (!isValid(d)) return "—"
+  const days = differenceInDays(new Date(), d)
+  if (days === 0) return "Day 1"
+  return `Day ${days + 1}`
+}
+
+export function getDaysBetween(
+  from: string | null | undefined,
+  to: string | null | undefined
+): number | null {
+  if (!from || !to) return null
+  const a = parseISO(from)
+  const b = parseISO(to)
+  if (!isValid(a) || !isValid(b)) return null
+  return Math.max(0, differenceInDays(b, a))
+}
+
 // ── Initials helper ──────────────────────────────────────────
 
 export function getInitials(name: string): string {

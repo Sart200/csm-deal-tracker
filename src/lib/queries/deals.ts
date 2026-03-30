@@ -134,7 +134,12 @@ export async function getOnboardingTasks(
 export async function addOnboardingTask(
   supabase: SupabaseClient,
   dealId: string,
-  title: string
+  title: string,
+  extras?: {
+    owner_role?: string
+    evidence_type?: string
+    evidence_notes?: string | null
+  }
 ): Promise<OnboardingTask> {
   // Get max task_number for this deal
   const { data: existing } = await supabase
@@ -152,8 +157,9 @@ export async function addOnboardingTask(
       deal_id: dealId,
       task_number: nextNumber,
       title,
-      owner_role: "CSM",
-      evidence_type: "Manual",
+      owner_role: extras?.owner_role ?? "CSM",
+      evidence_type: extras?.evidence_type ?? "Manual",
+      evidence_notes: extras?.evidence_notes ?? null,
     })
     .select(`*, completed_by_member:team_members(id, name)`)
     .single()
@@ -169,6 +175,17 @@ export async function deleteOnboardingTask(
     .from("onboarding_tasks")
     .delete()
     .eq("id", taskId)
+  if (error) throw error
+}
+
+export async function deleteDeal(
+  supabase: SupabaseClient,
+  id: string
+): Promise<void> {
+  // Remove all activity log entries for this deal first
+  await supabase.from("activity_log").delete().eq("deal_id", id)
+  // Delete the deal (DB cascade handles projects, phases, tasks, blockers, onboarding_tasks)
+  const { error } = await supabase.from("deals").delete().eq("id", id)
   if (error) throw error
 }
 
