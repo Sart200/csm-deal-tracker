@@ -10,7 +10,7 @@ export async function createBlocker(
   const { data: blocker, error } = await supabase
     .from("blockers")
     .insert({
-      phase_id: data.phase_id,
+      phase_id: data.phase_id || null,
       task_id: data.task_id || null,
       title: data.title,
       description: data.description || null,
@@ -23,25 +23,66 @@ export async function createBlocker(
     .single()
   if (error) throw error
 
-  // Get phase for project_id
-  const { data: phase } = await supabase
-    .from("phases")
-    .select("project_id")
-    .eq("id", data.phase_id)
-    .single()
+  if (data.phase_id) {
+    const { data: phase } = await supabase
+      .from("phases")
+      .select("project_id")
+      .eq("id", data.phase_id)
+      .single()
 
-  if (phase) {
-    await logActivity(supabase, {
-      entity_type: "blocker",
-      entity_id: blocker.id,
-      project_id: phase.project_id,
-      action: "blocker_raised",
-      actor: actorId ?? null,
-      metadata: { title: blocker.title, category: blocker.category },
-    })
+    if (phase) {
+      await logActivity(supabase, {
+        entity_type: "blocker",
+        entity_id: blocker.id,
+        project_id: phase.project_id,
+        action: "blocker_raised",
+        actor: actorId ?? null,
+        metadata: { title: blocker.title, category: blocker.category },
+      })
+    }
   }
 
   return blocker
+}
+
+export async function createOnboardingBlocker(
+  supabase: SupabaseClient,
+  onboardingTaskId: string,
+  data: { title: string; description?: string; category: string }
+): Promise<Blocker> {
+  // Create the blocker (no phase_id for onboarding tasks)
+  const { data: blocker, error } = await supabase
+    .from("blockers")
+    .insert({
+      phase_id: null,
+      task_id: null,
+      title: data.title,
+      description: data.description || null,
+      category: data.category,
+    })
+    .select()
+    .single()
+  if (error) throw error
+
+  // Link it back to the onboarding task
+  const { error: linkError } = await supabase
+    .from("onboarding_tasks")
+    .update({ blocker_id: blocker.id })
+    .eq("id", onboardingTaskId)
+  if (linkError) throw linkError
+
+  return blocker
+}
+
+export async function unlinkOnboardingBlocker(
+  supabase: SupabaseClient,
+  onboardingTaskId: string
+): Promise<void> {
+  const { error } = await supabase
+    .from("onboarding_tasks")
+    .update({ blocker_id: null })
+    .eq("id", onboardingTaskId)
+  if (error) throw error
 }
 
 export async function updateBlocker(

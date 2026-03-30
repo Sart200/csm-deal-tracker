@@ -38,8 +38,14 @@ export async function getDealById(
       ),
       onboarding_tasks(
         id, deal_id, task_number, title, owner_role, evidence_type,
-        completed_by, completed_at, evidence_notes, created_at,
-        completed_by_member:team_members(id, name)
+        completed_by, completed_at, evidence_notes, blocker_id, created_at,
+        completed_by_member:team_members(id, name),
+        linked_blocker:blockers!onboarding_tasks_blocker_id_fkey(
+          id, phase_id, task_id, title, description, category,
+          raised_by, raised_at, owner, target_resolution_date,
+          resolved_at, resolution_notes, status, escalation_note,
+          created_at, updated_at
+        )
       )
     `)
     .eq("id", id)
@@ -199,6 +205,7 @@ export async function updateOnboardingTask(
     completed_at?: string | null
     completed_by?: string | null
     evidence_notes?: string | null
+    blocker_id?: string | null
   },
   actorId?: string
 ): Promise<OnboardingTask> {

@@ -32,7 +32,10 @@ export function OnboardingChecklist({ tasks, dealId, teamMembers }: OnboardingCh
         .from('onboarding_tasks')
         .update({
           completed_at: isCompleting ? new Date().toISOString() : null,
-          completed_by: isCompleting ? (teamMembers[0]?.id ?? null) : null,
+          // Preserve user-set assignee; only clear completed_by when un-completing
+          completed_by: isCompleting
+            ? (task.completed_by ?? teamMembers[0]?.id ?? null)
+            : null,
         })
         .eq('id', task.id)
 

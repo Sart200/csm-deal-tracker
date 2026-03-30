@@ -62,8 +62,10 @@ export interface OnboardingTask {
   completed_by: string | null
   completed_at: string | null
   evidence_notes: string | null
+  blocker_id: string | null
   created_at: string
   completed_by_member?: Pick<TeamMember, 'id' | 'name'> | null
+  linked_blocker?: BlockerSummary | null
 }
 
 // ── Projects ────────────────────────────────────────────────
@@ -284,7 +286,7 @@ export interface BlockerFormData {
   category: BlockerCategory
   owner?: string
   target_resolution_date?: string
-  phase_id: string
+  phase_id?: string
   task_id?: string
 }
 

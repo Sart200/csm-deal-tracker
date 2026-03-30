@@ -165,7 +165,7 @@ export function TaskForm({
   function patchResolve(id: string, patch: Partial<{ loading: boolean; showNote: boolean; note: string }>) {
     setResolveState((prev) => ({
       ...prev,
-      [id]: { loading: false, showNote: false, note: '', ...prev[id], ...patch },
+      [id]: { ...(prev[id] ?? { loading: false, showNote: false, note: '' }), ...patch },
     }))
   }
 
