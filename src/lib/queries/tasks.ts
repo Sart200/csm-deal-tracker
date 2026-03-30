@@ -7,6 +7,41 @@ async function getPhaseProjectId(supabase: SupabaseClient, phaseId: string): Pro
   return data?.project_id ?? null
 }
 
+/**
+ * Recalculate phase.started_at = MIN(task.started_at) across all tasks in the phase.
+ * Also transitions the phase from not_started → in_progress when the first task start date is set.
+ */
+export async function syncPhaseStartDate(
+  supabase: SupabaseClient,
+  phaseId: string
+): Promise<void> {
+  const { data: tasks } = await supabase
+    .from("tasks")
+    .select("started_at")
+    .eq("phase_id", phaseId)
+    .not("started_at", "is", null)
+
+  if (!tasks || tasks.length === 0) return
+
+  const earliest = tasks
+    .map((t) => new Date(t.started_at as string))
+    .sort((a, b) => a.getTime() - b.getTime())[0]
+
+  const { data: phase } = await supabase
+    .from("phases")
+    .select("status")
+    .eq("id", phaseId)
+    .single()
+
+  const updates: Record<string, unknown> = { started_at: earliest.toISOString() }
+  // Only flip to in_progress if the phase hasn't been started yet
+  if (phase?.status === "not_started") {
+    updates.status = "in_progress"
+  }
+
+  await supabase.from("phases").update(updates).eq("id", phaseId)
+}
+
 export async function createTask(
   supabase: SupabaseClient,
   phaseId: string,
@@ -20,6 +55,7 @@ export async function createTask(
       title: data.title,
       assignee: data.assignee || null,
       priority: data.priority,
+      started_at: data.start_date || null,
       due_date: data.due_date || null,
       description: data.description || null,
       blocker_id: data.blocker_id || null,
@@ -27,6 +63,11 @@ export async function createTask(
     .select()
     .single()
   if (error) throw error
+
+  // Sync phase start date after task creation
+  if (data.start_date) {
+    await syncPhaseStartDate(supabase, phaseId)
+  }
 
   const projectId = await getPhaseProjectId(supabase, phaseId)
   await logActivity(supabase, {
@@ -54,13 +95,25 @@ export async function updateTask(
   }>,
   actorId?: string
 ): Promise<Task> {
+  // Map start_date → started_at for DB update
+  const dbUpdates: Record<string, unknown> = { ...updates }
+  if ("start_date" in updates) {
+    dbUpdates.started_at = updates.start_date || null
+    delete dbUpdates.start_date
+  }
+
   const { data: task, error } = await supabase
     .from("tasks")
-    .update(updates)
+    .update(dbUpdates)
     .eq("id", id)
     .select()
     .single()
   if (error) throw error
+
+  // Re-sync phase start date if started_at changed
+  if ("start_date" in updates || "started_at" in updates) {
+    await syncPhaseStartDate(supabase, task.phase_id)
+  }
 
   const projectId = await getPhaseProjectId(supabase, task.phase_id)
 
@@ -93,8 +146,20 @@ export async function updateTask(
 }
 
 export async function deleteTask(supabase: SupabaseClient, id: string): Promise<void> {
+  // Get phase_id before deletion so we can re-sync
+  const { data: task } = await supabase
+    .from("tasks")
+    .select("phase_id")
+    .eq("id", id)
+    .single()
+
   const { error } = await supabase.from("tasks").delete().eq("id", id)
   if (error) throw error
+
+  // Re-sync phase start date after deletion (another task may now be earliest)
+  if (task?.phase_id) {
+    await syncPhaseStartDate(supabase, task.phase_id)
+  }
 }
 
 export async function moveTask(
@@ -104,9 +169,9 @@ export async function moveTask(
   actorId?: string
 ): Promise<Task> {
   const updates: Record<string, unknown> = { status: newStatus }
-  if (newStatus === "in_progress") updates.started_at = new Date().toISOString()
+  // Never override user-set started_at — only touch completed_at
   if (newStatus === "done") updates.completed_at = new Date().toISOString()
-  if (newStatus === "todo") { updates.started_at = null; updates.completed_at = null }
+  if (newStatus === "todo") updates.completed_at = null
   return updateTask(supabase, taskId, updates as never, actorId)
 }
 

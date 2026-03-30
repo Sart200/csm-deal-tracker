@@ -109,22 +109,18 @@ export function TaskCard({ task, onEdit, onToggleComplete, onDelete }: TaskCardP
           {task.title}
         </p>
 
-        {/* Bottom row */}
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5">
-            {/* Assignee avatar */}
-            {task.assignee_member && (
-              <div
-                className="h-5 w-5 rounded-full bg-blue-600 flex items-center justify-center shrink-0"
-                title={task.assignee_member.name}
-              >
-                <span className="text-[9px] font-bold text-white">
-                  {getInitials(task.assignee_member.name)}
-                </span>
+        {/* Date range row: start → due */}
+        {(task.started_at || task.due_date) && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {task.started_at && (
+              <div className="flex items-center gap-0.5 text-xs text-slate-400">
+                <Calendar className="h-3 w-3" />
+                <span>{formatDateShort(task.started_at)}</span>
               </div>
             )}
-
-            {/* Due date */}
+            {task.started_at && task.due_date && (
+              <span className="text-slate-300 text-xs">→</span>
+            )}
             {task.due_date && (
               <div
                 className={cn(
@@ -137,8 +133,22 @@ export function TaskCard({ task, onEdit, onToggleComplete, onDelete }: TaskCardP
               </div>
             )}
           </div>
+        )}
 
-          {/* Priority badge */}
+        {/* Bottom row — assignee + priority */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-1.5">
+            {task.assignee_member && (
+              <div
+                className="h-5 w-5 rounded-full bg-blue-600 flex items-center justify-center shrink-0"
+                title={task.assignee_member.name}
+              >
+                <span className="text-[9px] font-bold text-white">
+                  {getInitials(task.assignee_member.name)}
+                </span>
+              </div>
+            )}
+          </div>
           <Badge
             variant="outline"
             className={cn('text-[10px] border-0 px-1 py-0 shrink-0', priorityClasses.badge)}

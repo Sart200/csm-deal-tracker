@@ -35,6 +35,7 @@ const taskSchema = z.object({
   title: z.string().min(1, 'Title is required'),
   assignee: z.string().optional(),
   priority: z.enum(['high', 'medium', 'low']),
+  start_date: z.string().min(1, 'Start date is required'),
   due_date: z.string().optional(),
   description: z.string().optional(),
 })
@@ -86,7 +87,7 @@ export function TaskForm({
     formState: { errors, isSubmitting },
   } = useForm<TaskFormValues>({
     resolver: zodResolver(taskSchema),
-    defaultValues: { title: '', assignee: undefined, priority: 'medium', due_date: '', description: '' },
+    defaultValues: { title: '', assignee: undefined, priority: 'medium', start_date: '', due_date: '', description: '' },
   })
 
   const priority = watch('priority')
@@ -100,11 +101,12 @@ export function TaskForm({
           title: task.title,
           assignee: task.assignee ?? undefined,
           priority: task.priority,
+          start_date: task.started_at ? task.started_at.split('T')[0] : '',
           due_date: task.due_date ?? '',
           description: task.description ?? '',
         })
       } else {
-        reset({ title: '', assignee: undefined, priority: 'medium', due_date: '', description: '' })
+        reset({ title: '', assignee: undefined, priority: 'medium', start_date: '', due_date: '', description: '' })
       }
     }
   }, [open, task, reset])
@@ -121,6 +123,7 @@ export function TaskForm({
           title: values.title,
           assignee: values.assignee || undefined,
           priority: values.priority,
+          start_date: values.start_date,
           due_date: values.due_date || undefined,
           description: values.description || undefined,
         })
@@ -130,6 +133,7 @@ export function TaskForm({
           title: values.title,
           assignee: values.assignee || undefined,
           priority: values.priority,
+          start_date: values.start_date,
           due_date: values.due_date || undefined,
           description: values.description || undefined,
         })
@@ -221,6 +225,23 @@ export function TaskForm({
             </Select>
           </div>
 
+          {/* Start Date + Due Date side by side */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label htmlFor="task-start-date">
+                Start Date <span className="text-red-500">*</span>
+              </Label>
+              <Input id="task-start-date" type="date" {...register('start_date')} />
+              {errors.start_date && (
+                <p className="text-xs text-red-500">{errors.start_date.message}</p>
+              )}
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="task-due-date">Due Date</Label>
+              <Input id="task-due-date" type="date" {...register('due_date')} />
+            </div>
+          </div>
+
           {/* Priority */}
           <div className="space-y-1.5">
             <Label>Priority</Label>
@@ -241,12 +262,6 @@ export function TaskForm({
                 </button>
               ))}
             </div>
-          </div>
-
-          {/* Due Date */}
-          <div className="space-y-1.5">
-            <Label htmlFor="task-due-date">Due Date</Label>
-            <Input id="task-due-date" type="date" {...register('due_date')} />
           </div>
 
           {/* Description */}

@@ -272,6 +272,7 @@ export interface TaskFormData {
   title: string
   assignee?: string
   priority: PriorityLevel
+  start_date: string        // mandatory — maps to tasks.started_at
   due_date?: string
   description?: string
   blocker_id?: string
