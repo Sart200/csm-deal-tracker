@@ -44,19 +44,20 @@ const PHASE_BAR: Record<string, { bar: string; label: string; textColor: string 
 
 // ─── helper sub-components ────────────────────────────────────────────────────
 
-/** A single onboarding task slot (T1–T9) */
-function OBCell({ taskNum, completedAt }: { taskNum: number; completedAt: string | null | undefined }) {
+/** A single onboarding task cell — shows truncated title or ✓ */
+function OBCell({ title, completedAt }: { title: string; completedAt: string | null | undefined }) {
   const done = !!completedAt
+  const label = done ? '✓' : (title.length > 6 ? title.slice(0, 5) + '…' : title)
   return (
     <div
       className={cn(
-        'flex-1 flex items-center justify-center border-r border-slate-100 last:border-r-0 transition-colors',
+        'flex-1 flex items-center justify-center border-r border-slate-100 last:border-r-0 transition-colors min-w-[28px]',
         done ? 'bg-emerald-500' : 'bg-slate-100',
       )}
-      title={`T${taskNum} — ${done ? 'completed' : 'pending'}`}
+      title={`${title} — ${done ? 'completed' : 'pending'}`}
     >
-      <span className={cn('text-[9px] font-medium select-none', done ? 'text-white' : 'text-slate-400')}>
-        {done ? '✓' : `T${taskNum}`}
+      <span className={cn('text-[9px] font-medium select-none truncate px-0.5', done ? 'text-white' : 'text-slate-400')}>
+        {label}
       </span>
     </div>
   )
@@ -102,10 +103,6 @@ export function ClientGanttRow({ deal, index }: ClientGanttRowProps) {
   const isEven = index % 2 === 0
   const groupBg = isEven ? 'bg-white' : 'bg-slate-50/40'
   const health = HEALTH_LABEL[deal.health] ?? HEALTH_LABEL.on_track
-
-  // Build onboarding map by task_number
-  const obMap: Record<number, string | null> = {}
-  deal.onboarding_tasks.forEach((t) => { obMap[t.task_number] = t.completed_at })
 
   const onboardingPct = deal.onboarding_total > 0
     ? Math.round((deal.onboarding_done / deal.onboarding_total) * 100)
@@ -198,11 +195,17 @@ export function ClientGanttRow({ deal, index }: ClientGanttRowProps) {
           <span className="text-[11px] text-slate-500 font-medium">Onboarding</span>
         </div>
 
-        {/* 9 task cells */}
+        {/* Dynamic task cells — one per actual onboarding task */}
         <div className="flex h-7 border-r border-slate-100">
-          {Array.from({ length: TOTAL_ONBOARDING }, (_, i) => i + 1).map((taskNum) => (
-            <OBCell key={taskNum} taskNum={taskNum} completedAt={obMap[taskNum]} />
-          ))}
+          {deal.onboarding_tasks.length === 0 ? (
+            <div className="flex-1 flex items-center justify-center">
+              <span className="text-[9px] text-slate-300 italic">No tasks</span>
+            </div>
+          ) : (
+            deal.onboarding_tasks.map((t) => (
+              <OBCell key={t.task_number} title={t.title} completedAt={t.completed_at} />
+            ))
+          )}
         </div>
 
         {/* Phases col — empty for onboarding row */}

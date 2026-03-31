@@ -10,8 +10,8 @@ export interface DealHealthData {
   csm: { id: string; name: string } | null
   onboarding_total: number
   onboarding_done: number
-  /** Per-slot onboarding data for the 9-cell Gantt row */
-  onboarding_tasks: { task_number: number; completed_at: string | null }[]
+  /** Per-task onboarding data — dynamic, one entry per actual task */
+  onboarding_tasks: { task_number: number; title: string; completed_at: string | null }[]
   projects: {
     id: string
     name: string
@@ -46,7 +46,7 @@ export async function getDealHealthDashboard(
     .select(`
       id, client_name, status, start_date, created_at, deal_value,
       csm:team_members!deals_csm_owner_fkey(id, name),
-      onboarding_tasks(id, task_number, completed_at),
+      onboarding_tasks(id, task_number, title, completed_at),
       projects(
         id, name, status, priority,
         phases(
@@ -76,14 +76,17 @@ export async function getDealHealthDashboard(
   })
 
   return (deals ?? []).map((deal) => {
-    const rawOnboarding: { id: string; task_number: number; completed_at: string | null }[] =
+    const rawOnboarding: { id: string; task_number: number; title: string; completed_at: string | null }[] =
       deal.onboarding_tasks ?? []
     const onboarding_total = rawOnboarding.length
     const onboarding_done = rawOnboarding.filter((t) => t.completed_at).length
-    const onboarding_tasks = rawOnboarding.map((t) => ({
-      task_number: t.task_number,
-      completed_at: t.completed_at,
-    }))
+    const onboarding_tasks = rawOnboarding
+      .sort((a, b) => a.task_number - b.task_number)
+      .map((t) => ({
+        task_number: t.task_number,
+        title: t.title,
+        completed_at: t.completed_at,
+      }))
 
     let total_open_blockers = 0
     let total_overdue_tasks = 0
