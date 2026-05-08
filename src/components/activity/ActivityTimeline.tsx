@@ -15,14 +15,14 @@ const SUCCESS_ACTIONS = new Set(['deal_created', 'project_created', 'task_comple
 export function ActivityTimeline({ logs }: ActivityTimelineProps) {
   if (logs.length === 0) {
     return (
-      <div className="flex items-center justify-center py-12 text-sm text-gray-400">
+      <div className="flex items-center justify-center py-12 text-sm text-muted-foreground">
         No activity yet.
       </div>
     )
   }
 
   return (
-    <div className="divide-y divide-gray-50">
+    <div className="divide-y divide-border">
       {logs.map((log) => {
         const hasAccent = ACCENT_ACTIONS.has(log.action)
         const isSuccess = SUCCESS_ACTIONS.has(log.action)
@@ -40,30 +40,27 @@ export function ActivityTimeline({ logs }: ActivityTimelineProps) {
         if (meta.template_name) details.push(String(meta.template_name))
 
         return (
-          <div
-            key={log.id}
-            className="px-4 py-3 hover:bg-gray-50 transition-colors"
-          >
+          <div key={log.id} className="px-4 py-3 hover:bg-accent/50 transition-colors">
             <div className="flex items-start justify-between gap-3">
               <div className="space-y-0.5 min-w-0 flex-1">
                 <p className={cn(
-                  'text-xs font-medium text-gray-700',
+                  'text-xs font-medium text-foreground',
                   hasAccent && 'text-red-600',
-                  isSuccess && !hasAccent && 'text-gray-900',
+                  isSuccess && !hasAccent && 'text-foreground',
                 )}>
                   {label}
                 </p>
 
                 {details.length > 0 && (
-                  <p className="text-xs text-gray-400 truncate">{details.join(' · ')}</p>
+                  <p className="text-xs text-muted-foreground truncate">{details.join(' · ')}</p>
                 )}
 
                 {log.actor_member && (
-                  <p className="text-xs text-gray-400">{log.actor_member.name}</p>
+                  <p className="text-xs text-muted-foreground">{log.actor_member.name}</p>
                 )}
               </div>
 
-              <span className="text-[10px] text-gray-400 shrink-0 whitespace-nowrap mt-0.5">
+              <span className="text-[10px] text-muted-foreground shrink-0 whitespace-nowrap mt-0.5">
                 {formatRelativeTime(log.timestamp)}
               </span>
             </div>
