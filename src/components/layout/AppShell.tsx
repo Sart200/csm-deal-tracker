@@ -10,7 +10,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [mobileOpen, setMobileOpen] = useState(false)
 
   return (
-    <div className="flex h-screen bg-slate-50 overflow-hidden">
+    <div className="flex h-screen bg-white overflow-hidden">
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex w-56 shrink-0 flex-col h-full">
         <Sidebar />
@@ -26,14 +26,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       {/* Main content */}
       <main className="flex-1 flex flex-col min-w-0 overflow-hidden">
         {/* Mobile topbar */}
-        <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-slate-200">
+        <div className="lg:hidden flex items-center gap-3 px-4 py-3 bg-white border-b border-gray-100">
           <button
             onClick={() => setMobileOpen(true)}
-            className="text-slate-600 hover:text-slate-900"
+            className="text-gray-500 hover:text-gray-700"
           >
             <Menu className="h-5 w-5" />
           </button>
-          <span className="font-semibold text-slate-800 text-sm">CSM Tracker</span>
+          <span className="font-medium text-gray-800 text-sm">CSM Tracker</span>
         </div>
 
         {/* Page content */}
